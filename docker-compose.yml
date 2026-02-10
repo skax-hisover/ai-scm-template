@@ -27,7 +27,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changethis}
       POSTGRES_DB: ${POSTGRES_DB:-ai_scm_db}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
 
   # ─── Redis (Celery Broker) ──────────────────────────────────
   redis:

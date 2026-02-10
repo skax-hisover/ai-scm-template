@@ -12,7 +12,7 @@
 4. [코딩 규칙](#4-코딩-규칙)
 5. [핵심 모듈 가이드](#5-핵심-모듈-가이드)
 6. [테스트](#6-테스트)
-7. [빌드 및 실행](#7-빌드-및-실행)
+7. [빌드, 실행 및 종료](#7-빌드-실행-및-종료)
 8. [배포](#8-배포)
 
 ---
@@ -21,29 +21,54 @@
 
 ### 1.1 사전 요구사항
 
-| 도구 | 버전 | 설치 |
-|------|------|------|
-| Python | ≥ 3.11 | [python.org](https://python.org) |
-| uv | ≥ 0.10 | `pip install uv` |
-| PostgreSQL | ≥ 16 | [postgresql.org](https://postgresql.org) 또는 Docker |
-| Redis | ≥ 7 | [redis.io](https://redis.io) 또는 Docker |
+아래 도구가 설치되어 있어야 합니다. 터미널에서 명령어를 실행하여 확인하세요.
 
-### 1.2 초기 설정
+| 도구 | 버전 | 설치 확인 | 설치 방법 |
+|------|------|-----------|-----------|
+| Python | ≥ 3.11 | `python --version` | [python.org](https://python.org) |
+| uv | ≥ 0.10 | `uv --version` | `pip install uv` |
+| Docker | — | `docker --version` | [docker.com](https://docker.com) |
+
+> 💡 PostgreSQL과 Redis는 Docker로 실행하므로 별도 설치가 필요하지 않습니다.
+
+### 1.2 초기 설정 (Step by Step)
+
+> 이 절차는 **처음 프로젝트를 세팅할 때 1회만** 수행합니다.
+
+**Step 1.** 프로젝트 루트 폴더에서 환경 변수 파일을 생성합니다.
 
 ```bash
-# 1. 환경 변수 설정 (프로젝트 루트에서)
+cd ai-scm-template
+
+# macOS / Linux
 cp .env.example .env
-# .env 파일을 환경에 맞게 수정
 
-# 2. 인프라 서비스 (Docker 권장)
-docker compose up -d db redis
-
-# 3. 의존성 설치
-cd backend
-uv sync                     # 프로덕션 + 개발 의존성 설치
+# Windows (PowerShell)
+Copy-Item .env.example .env
 ```
 
+> 생성된 `.env` 파일은 로컬 개발 환경에서는 기본값 그대로 사용해도 됩니다.
+
+**Step 2.** Docker Desktop이 실행 중인지 확인한 후, DB와 Redis를 시작합니다.
+
+```bash
+docker compose up -d db redis
+```
+
+> 정상 확인: `docker compose ps` 명령어로 `db`와 `redis`가 `healthy` 상태인지 확인합니다.
+
+**Step 3.** `backend` 폴더로 이동하여 Python 의존성을 설치합니다.
+
+```bash
+cd backend
+uv sync
+```
+
+> `uv sync`는 `pyproject.toml`에 정의된 모든 의존성을 설치하고 `.venv/` 가상환경을 자동 생성합니다.
+
 ### 1.3 가상환경 활성화
+
+> 백엔드 작업 시 **매번 터미널을 새로 열 때마다** 가상환경을 활성화해야 합니다.
 
 ```bash
 # macOS / Linux
@@ -56,19 +81,36 @@ source .venv/bin/activate
 .venv\Scripts\activate.bat
 ```
 
+> ✅ 프롬프트 앞에 `(.venv)` 표시가 나타나면 성공입니다.
+>
+> 작업이 끝나면 `deactivate` 명령어로 가상환경을 해제할 수 있습니다.
+
 ### 1.4 DB 마이그레이션 및 초기 데이터
+
+> 가상환경이 활성화된 상태에서 `backend/` 폴더 안에서 실행합니다.
 
 ```bash
 cd backend
 
-# DB 마이그레이션 적용
+# DB 테이블 생성 (마이그레이션 적용)
 alembic upgrade head
 
 # 초기 관리자 계정 생성
 python -m app.initial_data
 ```
 
-### 1.5 의존성 관리
+> 정상 완료 시 `Initial data created` 또는 `Superuser already exists` 메시지가 출력됩니다.
+
+### 1.5 주의사항 (트러블슈팅)
+
+| 증상 | 원인 | 해결 방법 |
+|------|------|-----------|
+| `uv sync` 시 `Unable to determine which files to ship` | Hatchling 빌드 설정 누락 | `pyproject.toml`에 `[tool.hatch.build.targets.wheel]` → `packages = ["app"]` 추가 |
+| `alembic upgrade head` 시 `UnicodeDecodeError (cp949)` | Windows 한국어 로캘에서 `alembic.ini`의 한글 주석 인코딩 충돌 | `alembic.ini`의 한글 주석을 영문으로 변경 |
+| `python -m app.initial_data` 시 `ValueError: password cannot be longer than 72 bytes` | `passlib`과 `bcrypt>=5.0` 호환성 문제 | `pyproject.toml`에 `"bcrypt>=4.0.0,<5.0.0"` 버전 고정 |
+| DB 연결 시 `password authentication failed` (한글 에러) | 로컬 PostgreSQL과 Docker PostgreSQL의 포트(5432) 충돌 | `.env`에서 `POSTGRES_PORT=5433` 등으로 변경 |
+
+### 1.6 의존성 관리
 
 | 작업 | 명령어 |
 |------|--------|
@@ -84,6 +126,8 @@ python -m app.initial_data
 [project]
 dependencies = [
     "fastapi[standard]>=0.115.0,<1.0.0",
+    "passlib[bcrypt]>=1.7.4,<2.0.0",
+    "bcrypt>=4.0.0,<5.0.0",             # passlib 호환을 위해 5.0 미만 고정
     ...
 ]
 
@@ -94,6 +138,14 @@ dev = [
     "ruff>=0.8.0,<1.0.0",
     ...
 ]
+
+# 빌드 설정 (hatchling이 app/ 패키지를 인식하도록)
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
 ```
 
 ---
@@ -511,11 +563,14 @@ def send_notification(user_id: str, message: str):
 send_notification.delay(str(user.id), "주문이 완료되었습니다")
 ```
 
-Celery 워커 실행:
+Celery 워커 실행 및 종료:
 
 ```bash
+# 워커 시작 (별도 터미널에서 실행, 가상환경 활성화 필요)
 cd backend
 celery -A app.tasks.celery_app worker --loglevel=info
+
+# 종료: Ctrl+C 입력
 ```
 
 ---
@@ -577,9 +632,12 @@ def test_create_order(client):
 
 ---
 
-## 7. 빌드 및 실행
+## 7. 빌드, 실행 및 종료
 
-### 7.1 개발 서버
+### 7.1 개발 서버 실행
+
+> 개발 서버는 코드를 수정하면 **자동으로 재시작**(Hot Reload)됩니다.
+> 가상환경이 활성화된 상태에서 `backend/` 폴더 안에서 실행하세요.
 
 ```bash
 cd backend
@@ -587,11 +645,46 @@ cd backend
 # uvicorn (자동 리로드)
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
-# 또는 FastAPI CLI
-fastapi run --reload app/main.py
+# 또는 FastAPI CLI (개발 모드 - 자동 리로드 포함)
+fastapi dev app/main.py
 ```
 
-### 7.2 Docker 빌드
+> ✅ `Uvicorn running on http://0.0.0.0:8000` 메시지가 나타나면 정상입니다.
+> 브라우저에서 http://localhost:8000/docs 에 접속하면 Swagger API 문서를 확인할 수 있습니다.
+
+### 7.2 개발 서버 종료
+
+```bash
+# 실행 중인 터미널에서 Ctrl+C를 눌러 서버를 종료합니다.
+# 이후 가상환경을 해제합니다.
+deactivate
+```
+
+> 💡 `Ctrl+C`: 키보드에서 `Ctrl` 키를 누른 채 `C` 키를 누릅니다. 현재 실행 중인 프로그램을 중단합니다.
+
+#### 전체 종료 절차 (로컬 개발 환경)
+
+| 순서 | 대상 | 종료 방법 |
+|:----:|------|-----------|
+| ① | **백엔드 서버** | 터미널에서 `Ctrl + C` 입력 |
+| ② | **가상환경 해제** | `deactivate` 입력 |
+| ③ | **Celery 워커** (실행한 경우) | 해당 터미널에서 `Ctrl + C` 입력 |
+| ④ | **DB + Redis (Docker)** | `docker compose down` 실행 (프로젝트 루트에서) |
+
+```bash
+# 프로젝트 루트 폴더에서 실행
+cd ai-scm-template
+
+# DB + Redis 컨테이너 종료 (데이터 유지)
+docker compose down
+
+# DB + Redis 컨테이너 종료 + 데이터 삭제 (DB 초기화 시 사용)
+docker compose down -v
+```
+
+### 7.3 Docker 빌드
+
+> Docker 이미지를 직접 빌드하는 방법입니다. **프로젝트 루트 폴더**에서 실행하세요.
 
 ```bash
 # 백엔드 이미지 빌드
@@ -602,9 +695,13 @@ docker run -p 8000:8000 \
   -e POSTGRES_SERVER=host.docker.internal \
   -e POSTGRES_PASSWORD=changethis \
   ai-scm-backend
+
+# 종료: 다른 터미널에서
+docker ps                              # 실행 중인 컨테이너 ID 확인
+docker stop <CONTAINER_ID>             # 컨테이너 종료
 ```
 
-### 7.3 Docker Compose
+### 7.4 Docker Compose
 
 ```bash
 # 전체 서비스 빌드 및 실행
@@ -615,9 +712,12 @@ docker compose up -d --build backend
 
 # 로그 확인
 docker compose logs -f backend
+
+# 종료
+docker compose down
 ```
 
-### 7.4 프로덕션 실행
+### 7.5 프로덕션 실행
 
 Dockerfile의 기본 CMD는 프로덕션 설정입니다:
 

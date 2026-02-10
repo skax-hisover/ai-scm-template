@@ -73,9 +73,9 @@
               └──┬───────────────────────┬──┘
                  │                       │
     ┌────────────▼──────┐    ┌──────────▼────────────┐
-    │ PostgreSQL (:5432)│    │   Redis (:6379)       │
-    │ - 영속 데이터 저장  │    │   - Celery 브로커      │
-    │ - Alembic 마이그   │    │   - 결과 백엔드         │
+    │  PostgreSQL       │    │   Redis (:6379)       │
+    │ (:5432, 설정 가능) │    │   - Celery 브로커      │
+    │ - 영속 데이터 저장  │    │   - 결과 백엔드         │
     └───────────────────┘    └──────────┬────────────┘
                                         │
                              ┌──────────▼────────────┐
@@ -202,56 +202,206 @@ ai-scm-template/
 
 ### 사전 요구사항
 
-| 도구 | 용도 | 설치 |
-|------|------|------|
-| Python ≥ 3.11 | 백엔드 런타임 | [python.org](https://python.org) |
-| Node.js ≥ 20 | 프론트엔드 런타임 | [nodejs.org](https://nodejs.org) |
-| uv | Python 패키지 관리 | `pip install uv` |
-| PostgreSQL ≥ 16 | 데이터베이스 | [postgresql.org](https://postgresql.org) |
-| Redis | Celery 브로커 | [redis.io](https://redis.io) |
-| Docker (선택) | 컨테이너 실행 | [docker.com](https://docker.com) |
+아래 도구들이 설치되어 있어야 합니다. 터미널(명령 프롬프트)에서 각 명령어를 실행하여 설치 여부를 확인하세요.
 
-### 방법 A: Docker Compose (권장)
+| 도구 | 용도 | 설치 확인 명령어 | 설치 |
+|------|------|-----------------|------|
+| Python ≥ 3.11 | 백엔드 런타임 | `python --version` | [python.org](https://python.org) |
+| Node.js ≥ 20 | 프론트엔드 런타임 | `node --version` | [nodejs.org](https://nodejs.org) |
+| npm ≥ 10 | 프론트엔드 패키지 관리 | `npm --version` | Node.js에 포함 |
+| uv | Python 패키지 관리 | `uv --version` | `pip install uv` |
+| Docker | 컨테이너 실행 | `docker --version` | [docker.com](https://docker.com) |
+
+> 💡 **Docker Desktop을 설치**하면 Docker와 Docker Compose가 함께 설치됩니다. PostgreSQL과 Redis는 Docker로 실행하므로 별도 설치가 필요하지 않습니다.
+
+---
+
+### 방법 A: Docker Compose로 전체 실행 (가장 간편)
+
+> 모든 서비스를 Docker 컨테이너로 한 번에 실행합니다. **가장 빠르게 전체 시스템을 확인**하고 싶을 때 사용합니다.
+
+**Step 1.** 터미널을 열고 프로젝트 루트 폴더로 이동합니다.
 
 ```bash
-# 1. 환경 변수 설정
+cd ai-scm-template
+```
+
+**Step 2.** 환경 변수 파일을 생성합니다. (`.env.example`을 복사하여 `.env`를 만듭니다)
+
+```bash
+# macOS / Linux
 cp .env.example .env
-# .env 파일을 환경에 맞게 수정
 
-# 2. 전체 서비스 실행
+# Windows (PowerShell)
+Copy-Item .env.example .env
+```
+
+**Step 3.** Docker Desktop이 실행 중인지 확인한 후, 전체 서비스를 시작합니다.
+
+```bash
 docker compose up -d
+```
 
-# 3. DB 마이그레이션 & 초기 데이터 (최초 1회)
+> 처음 실행 시 이미지 다운로드 및 빌드에 몇 분이 소요될 수 있습니다.
+
+**Step 4.** DB 마이그레이션과 초기 데이터를 생성합니다. (최초 1회만 실행)
+
+```bash
 docker compose exec backend alembic upgrade head
 docker compose exec backend python -m app.initial_data
 ```
 
-### 방법 B: 로컬 직접 실행
+**Step 5.** 실행 상태를 확인합니다.
 
 ```bash
-# 1. 환경 변수 설정
+docker compose ps
+```
+
+> 모든 서비스의 `STATUS`가 `Up` 또는 `healthy`로 표시되면 정상입니다.
+
+#### 🛑 종료 방법
+
+```bash
+# 전체 서비스 종료 (데이터 유지)
+docker compose down
+
+# 전체 서비스 종료 + 데이터 볼륨 삭제 (DB 데이터도 삭제됨 — 초기화 시 사용)
+docker compose down -v
+```
+
+---
+
+### 방법 B: 로컬 직접 실행 (개발 시 권장)
+
+> DB와 Redis만 Docker로 띄우고, 백엔드·프론트엔드는 로컬에서 직접 실행합니다.
+> **코드 수정 시 자동으로 서버가 재시작**(Hot Reload)되므로 개발할 때 편리합니다.
+>
+> ⚠️ 이 방법은 터미널 창이 **최소 3개** 필요합니다 (백엔드, 프론트엔드, 인프라).
+
+#### 📌 터미널 1: 인프라 (DB + Redis)
+
+**Step 1.** 환경 변수 파일을 생성합니다. (최초 1회)
+
+```bash
+cd ai-scm-template
+
+# macOS / Linux
 cp .env.example .env
 
-# 2. 인프라 서비스 (Docker로 DB + Redis만 실행)
-docker compose up -d db redis
-
-# 3. 백엔드
-cd backend
-uv sync                                              # 의존성 설치
-source .venv/bin/activate                            # 가상환경 활성화 (Windows: .venv\Scripts\activate)
-alembic upgrade head                                 # DB 마이그레이션
-python -m app.initial_data                           # 초기 데이터 생성
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000  # 서버 시작
-
-# 4. Celery 워커 (별도 터미널)
-cd backend
-celery -A app.tasks.celery_app worker --loglevel=info
-
-# 5. 프론트엔드 (별도 터미널)
-cd frontend
-npm install                                          # 의존성 설치
-npm run dev                                          # 개발 서버 시작
+# Windows (PowerShell)
+Copy-Item .env.example .env
 ```
+
+**Step 2.** Docker Desktop이 실행 중인지 확인한 후, DB와 Redis를 시작합니다.
+
+```bash
+docker compose up -d db redis
+```
+
+**Step 3.** 정상 실행 여부를 확인합니다.
+
+```bash
+docker compose ps
+```
+
+> `db`와 `redis` 서비스의 `STATUS`가 `healthy`로 표시되면 정상입니다.
+
+#### 📌 터미널 2: 백엔드
+
+**Step 1.** 프로젝트 루트에서 `backend` 폴더로 이동합니다.
+
+```bash
+cd ai-scm-template/backend
+```
+
+**Step 2.** Python 의존성을 설치합니다. (최초 1회 또는 의존성 변경 시)
+
+```bash
+uv sync
+```
+
+**Step 3.** 가상환경을 활성화합니다.
+
+```bash
+# macOS / Linux
+source .venv/bin/activate
+
+# Windows (PowerShell)
+.venv\Scripts\activate
+
+# Windows (cmd)
+.venv\Scripts\activate.bat
+```
+
+> 프롬프트 앞에 `(.venv)` 표시가 나타나면 성공입니다.
+
+**Step 4.** DB 마이그레이션 및 초기 데이터를 생성합니다. (최초 1회)
+
+```bash
+alembic upgrade head
+python -m app.initial_data
+```
+
+**Step 5.** 백엔드 개발 서버를 시작합니다.
+
+```bash
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+> `Uvicorn running on http://0.0.0.0:8000` 메시지가 나타나면 정상입니다.
+> 브라우저에서 http://localhost:8000/docs 에 접속하여 Swagger UI를 확인할 수 있습니다.
+
+#### 📌 터미널 3: 프론트엔드
+
+**Step 1.** 프로젝트 루트에서 `frontend` 폴더로 이동합니다.
+
+```bash
+cd ai-scm-template/frontend
+```
+
+**Step 2.** Node.js 의존성을 설치합니다. (최초 1회 또는 의존성 변경 시)
+
+```bash
+npm install
+```
+
+**Step 3.** 프론트엔드 개발 서버를 시작합니다.
+
+```bash
+npm run dev
+```
+
+> `Ready in Xs` 메시지가 나타나면 정상입니다.
+> 브라우저에서 http://localhost:3000 에 접속하여 화면을 확인할 수 있습니다.
+
+#### 📌 터미널 4: Celery 워커 (선택 — 비동기 작업 필요 시)
+
+```bash
+cd ai-scm-template/backend
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+celery -A app.tasks.celery_app worker --loglevel=info
+```
+
+#### 🛑 종료 방법
+
+서비스를 종료할 때는 **시작한 순서의 역순**으로 진행합니다.
+
+| 순서 | 대상 | 종료 방법 |
+|:----:|------|-----------|
+| ① | **프론트엔드** (터미널 3) | 터미널에서 `Ctrl + C` 입력 |
+| ② | **Celery 워커** (터미널 4, 실행한 경우) | 터미널에서 `Ctrl + C` 입력 |
+| ③ | **백엔드** (터미널 2) | 터미널에서 `Ctrl + C` 입력 후 `deactivate` 입력 (가상환경 해제) |
+| ④ | **DB + Redis** (터미널 1) | 아래 명령어 실행 |
+
+```bash
+# DB + Redis 컨테이너 종료 (데이터 유지)
+docker compose down
+
+# DB + Redis 컨테이너 종료 + 데이터 삭제 (DB 초기화 시 사용)
+docker compose down -v
+```
+
+> 💡 **`Ctrl + C`란?** 키보드에서 `Ctrl` 키를 누른 채로 `C` 키를 누르는 것입니다. 현재 실행 중인 프로그램을 중단하는 명령입니다.
 
 ---
 
@@ -268,7 +418,7 @@ npm run dev                                          # 개발 서버 시작
 | `BACKEND_CORS_ORIGINS` | 허용 CORS 오리진 (쉼표 구분) | `http://localhost:3000,...` |
 | `FRONTEND_HOST` | 프론트엔드 URL | `http://localhost:3000` |
 | `NEXT_PUBLIC_API_URL` | 프론트엔드에서 사용할 API URL | `http://localhost:8000` |
-| `POSTGRES_*` | PostgreSQL 접속 정보 | `localhost:5432` |
+| `POSTGRES_*` | PostgreSQL 접속 정보 | `localhost:5432` (`.env`에서 변경 가능) |
 | `REDIS_*` | Redis 접속 정보 | `localhost:6379` |
 | `CELERY_*` | Celery 브로커/백엔드 URL | `redis://localhost:6379/0,1` |
 | `FIRST_SUPERUSER` | 초기 관리자 이메일 | `admin@ai-scm.com` |
@@ -277,6 +427,8 @@ npm run dev                                          # 개발 서버 시작
 | `SENTRY_DSN` | Sentry DSN (선택) | — |
 
 > ⚠️ `SECRET_KEY`, `POSTGRES_PASSWORD`, `FIRST_SUPERUSER_PASSWORD`는 `local` 환경이 아닌 경우 반드시 변경해야 합니다. 기본값(`changethis`) 사용 시 에러가 발생합니다.
+
+> 💡 **로컬에 PostgreSQL이 이미 설치된 경우**: 기본 포트(5432)가 충돌할 수 있습니다. `.env`에서 `POSTGRES_PORT=5433` 등으로 변경하세요. `docker-compose.yml`이 `${POSTGRES_PORT:-5432}`를 읽어 자동 반영합니다.
 
 ### 환경 변수 관리 규칙
 
@@ -292,7 +444,7 @@ npm run dev                                          # 개발 서버 시작
 
 | 서비스 | 이미지 | 포트 | 설명 |
 |--------|--------|------|------|
-| `db` | postgres:16 | 5432 | PostgreSQL 데이터베이스 |
+| `db` | postgres:16 | `${POSTGRES_PORT:-5432}` | PostgreSQL 데이터베이스 |
 | `redis` | redis:7-alpine | 6379 | Redis (Celery 브로커) |
 | `backend` | 커스텀 빌드 | 8000 | FastAPI 백엔드 |
 | `celery-worker` | 커스텀 빌드 | — | Celery 비동기 워커 |
@@ -300,12 +452,25 @@ npm run dev                                          # 개발 서버 시작
 | `pgadmin` | dpage/pgadmin4 | 5050 | DB 관리 도구 (선택) |
 
 ```bash
-# 사용 예시
-docker compose up -d              # 전체 서비스 시작
+# ── 시작 ──
+docker compose up -d              # 전체 서비스 시작 (백그라운드)
 docker compose up -d db redis     # DB + Redis만 시작
-docker compose logs -f backend    # 백엔드 로그 확인
-docker compose down -v            # 전체 중지 + 볼륨 삭제
+docker compose ps                 # 실행 중인 서비스 상태 확인
+
+# ── 로그 확인 ──
+docker compose logs -f backend    # 백엔드 로그 실시간 확인 (Ctrl+C로 로그 보기 종료)
+docker compose logs -f frontend   # 프론트엔드 로그 실시간 확인
+
+# ── 종료 ──
+docker compose stop               # 전체 서비스 일시 중지 (데이터 유지, 컨테이너 유지)
+docker compose down               # 전체 서비스 종료 + 컨테이너 삭제 (데이터 유지)
+docker compose down -v            # 전체 서비스 종료 + 컨테이너·볼륨 삭제 (DB 초기화)
 ```
+
+> 💡 `stop`과 `down`의 차이:
+> - `stop` → 컨테이너를 일시 중지합니다. `docker compose start`로 다시 시작할 수 있습니다.
+> - `down` → 컨테이너를 삭제합니다. `docker compose up -d`로 새로 생성해야 합니다.
+> - `down -v` → 컨테이너 + 데이터 볼륨까지 삭제합니다. **DB 데이터가 모두 초기화**됩니다.
 
 ---
 

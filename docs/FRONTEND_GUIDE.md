@@ -12,7 +12,7 @@
 4. [코딩 규칙](#4-코딩-규칙)
 5. [핵심 모듈 가이드](#5-핵심-모듈-가이드)
 6. [테스트 및 검증](#6-테스트-및-검증)
-7. [빌드 및 실행](#7-빌드-및-실행)
+7. [빌드, 실행 및 종료](#7-빌드-실행-및-종료)
 8. [배포](#8-배포)
 
 ---
@@ -21,22 +21,42 @@
 
 ### 1.1 사전 요구사항
 
-| 도구 | 버전 | 설치 |
-|------|------|------|
-| Node.js | ≥ 20 | [nodejs.org](https://nodejs.org) |
-| npm | ≥ 10 | Node.js에 포함 |
+아래 도구가 설치되어 있어야 합니다. 터미널에서 명령어를 실행하여 확인하세요.
 
-### 1.2 초기 설정
+| 도구 | 버전 | 설치 확인 | 설치 방법 |
+|------|------|-----------|-----------|
+| Node.js | ≥ 20 | `node --version` | [nodejs.org](https://nodejs.org) |
+| npm | ≥ 10 | `npm --version` | Node.js에 포함 |
+
+> 💡 Node.js를 설치하면 npm이 함께 설치됩니다.
+
+### 1.2 초기 설정 (Step by Step)
+
+> 이 절차는 **처음 프로젝트를 세팅할 때 1회만** 수행합니다.
+
+**Step 1.** 프로젝트 루트에서 환경 변수 파일을 생성합니다. (아직 없는 경우)
 
 ```bash
-# 1. 환경 변수 설정 (프로젝트 루트에서)
-cp .env.example .env
-# .env 파일을 환경에 맞게 수정 (NEXT_PUBLIC_API_URL 등)
+cd ai-scm-template
 
-# 2. 의존성 설치
+# macOS / Linux
+cp .env.example .env
+
+# Windows (PowerShell)
+Copy-Item .env.example .env
+```
+
+> `.env` 파일의 `NEXT_PUBLIC_API_URL`이 백엔드 주소(기본값: `http://localhost:8000`)와 일치하는지 확인하세요.
+
+**Step 2.** `frontend` 폴더로 이동하여 Node.js 의존성을 설치합니다.
+
+```bash
 cd frontend
 npm install
 ```
+
+> `npm install`은 `package.json`에 정의된 모든 패키지를 `node_modules/` 폴더에 설치합니다.
+> 처음 실행 시 몇 분이 소요될 수 있습니다.
 
 ### 1.3 환경 변수
 
@@ -505,33 +525,51 @@ npm run type-check
 
 ---
 
-## 7. 빌드 및 실행
+## 7. 빌드, 실행 및 종료
 
-### 7.1 개발 서버
+### 7.1 개발 서버 실행
+
+> 개발 서버는 코드를 수정하면 **자동으로 화면이 갱신**(Hot Reload)됩니다.
+> `frontend/` 폴더에서 실행하세요.
 
 ```bash
 cd frontend
 
-# 개발 서버 시작 (Hot Reload)
+# 개발 서버 시작
 npm run dev
-# → http://localhost:3000
 ```
 
-### 7.2 프로덕션 빌드
+> ✅ `Ready in Xs` 메시지가 나타나면 정상입니다.
+> 브라우저에서 http://localhost:3000 에 접속하여 화면을 확인할 수 있습니다.
+
+### 7.2 개발 서버 종료
+
+```bash
+# 실행 중인 터미널에서 Ctrl+C를 눌러 서버를 종료합니다.
+```
+
+> 💡 `Ctrl+C`: 키보드에서 `Ctrl` 키를 누른 채 `C` 키를 누릅니다. 현재 실행 중인 프로그램을 중단합니다.
+
+### 7.3 프로덕션 빌드
+
+> 프로덕션 빌드는 코드를 최적화하여 실제 운영 환경에서 사용할 결과물을 생성합니다.
 
 ```bash
 cd frontend
 
-# 프로덕션 빌드
+# 프로덕션 빌드 (최적화된 결과물 생성)
 npm run build
 
 # 빌드 결과 확인 (.next/ 디렉터리 생성)
 # 빌드된 앱 실행
 npm run start
-# → http://localhost:3000
+
+# 종료: Ctrl+C 입력
 ```
 
-### 7.3 npm scripts
+> 빌드된 앱은 http://localhost:3000 에서 확인할 수 있습니다.
+
+### 7.4 npm scripts 요약
 
 | 스크립트 | 명령어 | 설명 |
 |----------|--------|------|
@@ -541,7 +579,9 @@ npm run start
 | `lint` | `next lint` | ESLint 검사 |
 | `type-check` | `tsc --noEmit` | TypeScript 타입 검사 |
 
-### 7.4 Docker 빌드
+### 7.5 Docker 빌드
+
+> Docker 이미지를 직접 빌드하는 방법입니다. **프로젝트 루트 폴더**에서 실행하세요.
 
 프론트엔드 Dockerfile은 **3단계 멀티스테이지 빌드**를 사용합니다:
 
@@ -559,11 +599,15 @@ docker build -f frontend/Dockerfile \
 
 # 빌드된 이미지 실행
 docker run -p 3000:3000 ai-scm-frontend
+
+# 종료: 다른 터미널에서
+docker ps                              # 실행 중인 컨테이너 ID 확인
+docker stop <CONTAINER_ID>             # 컨테이너 종료
 ```
 
 > ⚠️ `NEXT_PUBLIC_API_URL`은 **빌드 시점**에 결정됩니다 (`--build-arg`로 전달). 런타임에 변경할 수 없습니다.
 
-### 7.5 Docker Compose
+### 7.6 Docker Compose
 
 ```bash
 # 프론트엔드만 빌드 및 실행
@@ -571,6 +615,9 @@ docker compose up -d --build frontend
 
 # 로그 확인
 docker compose logs -f frontend
+
+# 종료
+docker compose down
 ```
 
 ---
