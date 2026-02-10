@@ -103,31 +103,31 @@ dev = [
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  API Layer (api/v1/)                                    │
-│  - HTTP 요청/응답 처리                                   │
+│  - HTTP 요청/응답 처리                                    │
 │  - 인증 검증 (Depends: CurrentUser, CurrentSuperUser)    │
-│  - 요청 유효성 검증 (Pydantic Schema)                    │
-│  - 응답 직렬화                                           │
+│  - 요청 유효성 검증 (Pydantic Schema)                     │
+│  - 응답 직렬화                                            │
 ├─────────────────────────────────────────────────────────┤
 │  CRUD Layer (crud/)                                     │
-│  - 데이터 접근 로직                                      │
-│  - CRUDBase 상속으로 공통 CRUD 자동 제공                  │
-│  - 엔티티별 특수 쿼리 구현                               │
+│  - 데이터 접근 로직                                       │
+│  - CRUDBase 상속으로 공통 CRUD 자동 제공                   │
+│  - 엔티티별 특수 쿼리 구현                                 │
 ├─────────────────────────────────────────────────────────┤
 │  Model Layer (models/)                                  │
 │  - SQLAlchemy ORM 모델                                  │
-│  - Base 클래스 (UUID PK 자동 생성)                       │
+│  - Base 클래스 (UUID PK 자동 생성)                        │
 │  - TimestampMixin (created_at, updated_at 자동 관리)     │
 ├─────────────────────────────────────────────────────────┤
 │  Schema Layer (schemas/)                                │
-│  - Pydantic 스키마 (DTO)                                │
+│  - Pydantic 스키마 (DTO)                                 │
 │  - Create / Update / Response 분리                      │
-│  - 요청/응답 데이터 검증 및 직렬화                       │
+│  - 요청/응답 데이터 검증 및 직렬화                          │
 ├─────────────────────────────────────────────────────────┤
 │  Core Layer (core/)                                     │
 │  - config.py: 환경 설정 (pydantic-settings)              │
-│  - database.py: DB 연결/세션 관리                        │
-│  - security.py: JWT 토큰, 비밀번호 해싱                  │
-│  - logging.py: 구조화된 JSON 로깅                        │
+│  - database.py: DB 연결/세션 관리                         │
+│  - security.py: JWT 토큰, 비밀번호 해싱                   │
+│  - logging.py: 구조화된 JSON 로깅                         │
 └─────────────────────────────────────────────────────────┘
 ```
 
