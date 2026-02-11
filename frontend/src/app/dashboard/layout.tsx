@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { isAuthenticated, removeTokens } from "@/lib/auth/token";
+import { getMeApi, type UserResponse } from "@/lib/api/auth";
 
 /**
  * 대시보드 레이아웃 (인증 필수).
@@ -11,6 +12,7 @@ import { isAuthenticated, removeTokens } from "@/lib/auth/token";
  * [개발 표준]
  * - 인증이 필요한 페이지는 이 레이아웃 하위에 배치합니다.
  * - 사이드바/헤더 등 공통 UI를 여기에 정의합니다.
+ * - 관리자 전용 메뉴는 is_superuser인 경우에만 표시합니다.
  */
 export default function DashboardLayout({
   children,
@@ -18,11 +20,20 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const [currentUser, setCurrentUser] = useState<UserResponse | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated()) {
       router.replace("/login");
+      return;
     }
+    // 로그인된 사용자 정보 조회 (관리자 여부 확인용)
+    getMeApi()
+      .then(setCurrentUser)
+      .catch(() => {
+        removeTokens();
+        router.replace("/login");
+      });
   }, [router]);
 
   const handleLogout = () => {
@@ -48,6 +59,15 @@ export default function DashboardLayout({
           >
             📦 아이템 관리
           </Link>
+          {/* 관리자 전용 메뉴 */}
+          {currentUser?.is_superuser && (
+            <Link
+              href="/dashboard/users"
+              className="block rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+            >
+              👤 사용자 관리
+            </Link>
+          )}
           {/* ─── 새로운 메뉴 추가 위치 ─── */}
         </nav>
         <div className="mt-auto pt-8">
