@@ -24,9 +24,7 @@ from app.models.user import User
 from app.schemas.auth import TokenPayload
 
 # OAuth2 스키마 (Swagger UI에서 자물쇠 아이콘 표시)
-oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl=f"{settings.API_V1_STR}/auth/login"
-)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login")
 
 # ─── 타입 별칭 ─────────────────────────────────────────────
 DbSession = Annotated[Session, Depends(get_db)]
@@ -53,8 +51,8 @@ def get_current_user(db: DbSession, token: TokenStr) -> User:
         token_data = TokenPayload(**payload)
         if token_data.sub is None:
             raise credentials_exception
-    except jwt.InvalidTokenError:
-        raise credentials_exception
+    except jwt.InvalidTokenError as err:
+        raise credentials_exception from err
 
     user = db.get(User, token_data.sub)
     if not user:

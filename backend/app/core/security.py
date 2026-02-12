@@ -9,7 +9,7 @@ JWT 토큰 생성/검증, 비밀번호 해싱 등을 담당합니다.
 - 토큰 만료 시간은 settings에서 관리합니다.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
@@ -40,11 +40,9 @@ def create_access_token(
         인코딩된 JWT 문자열
     """
     if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
+        expire = datetime.now(UTC) + expires_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(
-            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-        )
+        expire = datetime.now(UTC) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode = {
         "exp": expire,
         "sub": str(subject),
@@ -63,9 +61,7 @@ def create_refresh_token(subject: str | Any) -> str:
     Returns:
         인코딩된 JWT 문자열
     """
-    expire = datetime.now(timezone.utc) + timedelta(
-        days=settings.REFRESH_TOKEN_EXPIRE_DAYS
-    )
+    expire = datetime.now(UTC) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     to_encode = {
         "exp": expire,
         "sub": str(subject),

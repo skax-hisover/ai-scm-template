@@ -7,12 +7,12 @@
 - 사용자 표시용 변환은 프론트엔드에서 수행합니다.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def get_utc_now() -> datetime:
     """현재 UTC 시간을 반환합니다."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def format_datetime(dt: datetime | None, fmt: str = "%Y-%m-%d %H:%M:%S") -> str:

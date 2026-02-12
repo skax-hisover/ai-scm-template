@@ -39,9 +39,7 @@ def list_items(
         items = item_crud.get_multi(db, skip=skip, limit=limit)
         total = item_crud.get_count(db)
     else:
-        items = item_crud.get_by_owner(
-            db, owner_id=current_user.id, skip=skip, limit=limit
-        )
+        items = item_crud.get_by_owner(db, owner_id=current_user.id, skip=skip, limit=limit)
         total = item_crud.get_count_by_owner(db, owner_id=current_user.id)
     return ItemListResponse(data=items, total=total)
 

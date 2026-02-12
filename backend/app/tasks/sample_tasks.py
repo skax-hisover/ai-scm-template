@@ -47,7 +47,7 @@ def send_welcome_email(self, user_id: str, email: str) -> dict:
             extra={"user_id": user_id, "email": email, "error": str(exc)},
         )
         # 재시도
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc) from exc
 
 
 @celery_app.task

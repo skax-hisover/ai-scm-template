@@ -3,7 +3,6 @@
 """
 
 import secrets
-import string
 
 
 def mask_email(email: str) -> str:
@@ -15,10 +14,7 @@ def mask_email(email: str) -> str:
     if "@" not in email:
         return email
     local, domain = email.split("@", 1)
-    if len(local) <= 2:
-        masked_local = local[0] + "***"
-    else:
-        masked_local = local[:2] + "***"
+    masked_local = local[0] + "***" if len(local) <= 2 else local[:2] + "***"
     return f"{masked_local}@{domain}"
 
 

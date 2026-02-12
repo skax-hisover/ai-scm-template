@@ -23,9 +23,7 @@ def register_error_handlers(app: FastAPI) -> None:
     """FastAPI 앱에 에러 핸들러를 등록합니다."""
 
     @app.exception_handler(RequestValidationError)
-    async def validation_exception_handler(
-        request: Request, exc: RequestValidationError
-    ) -> JSONResponse:
+    async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
         """요청 유효성 검증 에러 핸들러."""
         logger.warning(
             "요청 유효성 검증 실패",
@@ -43,9 +41,7 @@ def register_error_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(Exception)
-    async def global_exception_handler(
-        request: Request, exc: Exception
-    ) -> JSONResponse:
+    async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
         """전역 예외 핸들러 (500 Internal Server Error)."""
         logger.error(
             "처리되지 않은 예외 발생",
@@ -59,11 +55,7 @@ def register_error_handlers(app: FastAPI) -> None:
         )
 
         # 로컬 환경에서는 상세 에러 메시지 반환
-        detail = (
-            str(exc)
-            if settings.ENVIRONMENT == "local"
-            else "서버 내부 오류가 발생했습니다"
-        )
+        detail = str(exc) if settings.ENVIRONMENT == "local" else "서버 내부 오류가 발생했습니다"
 
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

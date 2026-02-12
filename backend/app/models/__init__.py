@@ -10,5 +10,5 @@ SQLAlchemy ORM 모델 패키지.
 """
 
 from app.models.base import Base, TimestampMixin  # noqa: F401
-from app.models.user import User  # noqa: F401
 from app.models.item import Item  # noqa: F401
+from app.models.user import User  # noqa: F401
