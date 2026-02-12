@@ -11,8 +11,7 @@ API 라우터 설정.
 
 from fastapi import APIRouter
 
-from app.api.v1 import auth, items, users, health
-from app.core.config import settings
+from app.api.v1 import auth, health, items, users
 
 api_router = APIRouter()
 

@@ -19,8 +19,9 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 WORKDIR /app
 
 # 의존성 설치 (캐시 레이어 최적화)
-COPY backend/pyproject.toml /app/backend/
-RUN cd backend && uv sync --frozen --no-install-workspace 2>/dev/null || uv pip install --system -r <(uv pip compile pyproject.toml)
+COPY backend/pyproject.toml backend/uv.lock* /app/backend/
+RUN cd backend && uv sync --frozen --no-install-workspace 2>/dev/null || \
+    (uv pip compile pyproject.toml -o requirements.txt && uv pip install --system -r requirements.txt)
 
 # 소스 복사
 COPY backend/ /app/backend/

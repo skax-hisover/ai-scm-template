@@ -11,7 +11,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
-from app.api.deps import CurrentSuperUser, CurrentUser, DbSession
+from app.api.deps import CurrentSuperUser, DbSession
 from app.crud import user_crud
 from app.schemas.common import Message
 from app.schemas.user import UserCreate, UserListResponse, UserResponse, UserUpdate
@@ -22,7 +22,7 @@ router = APIRouter()
 @router.get("/", response_model=UserListResponse)
 def list_users(
     db: DbSession,
-    current_user: CurrentSuperUser,
+    _current_user: CurrentSuperUser,
     skip: int = 0,
     limit: int = 20,
 ) -> Any:
@@ -35,7 +35,7 @@ def list_users(
 @router.get("/{user_id}", response_model=UserResponse)
 def get_user(
     db: DbSession,
-    current_user: CurrentSuperUser,
+    _current_user: CurrentSuperUser,
     user_id: uuid.UUID,
 ) -> Any:
     """사용자 상세 조회 (관리자 전용)."""
@@ -48,7 +48,7 @@ def get_user(
 @router.post("/", response_model=UserResponse, status_code=201)
 def create_user(
     db: DbSession,
-    current_user: CurrentSuperUser,
+    _current_user: CurrentSuperUser,
     user_in: UserCreate,
 ) -> Any:
     """사용자 생성 (관리자 전용)."""
@@ -62,7 +62,7 @@ def create_user(
 @router.put("/{user_id}", response_model=UserResponse)
 def update_user(
     db: DbSession,
-    current_user: CurrentSuperUser,
+    _current_user: CurrentSuperUser,
     user_id: uuid.UUID,
     user_in: UserUpdate,
 ) -> Any:

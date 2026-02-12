@@ -26,23 +26,13 @@ class CRUDItem(CRUDBase[Item, ItemCreate, ItemUpdate]):
         limit: int = 20,
     ) -> list[Item]:
         """소유자별 아이템 목록 조회."""
-        stmt = (
-            select(Item)
-            .where(Item.owner_id == owner_id)
-            .order_by(Item.created_at.desc())
-            .offset(skip)
-            .limit(limit)
-        )
+        stmt = select(Item).where(Item.owner_id == owner_id).order_by(Item.created_at.desc()).offset(skip).limit(limit)
         result = db.execute(stmt)
         return list(result.scalars().all())
 
     def get_count_by_owner(self, db: Session, *, owner_id: uuid.UUID) -> int:
         """소유자별 아이템 건수 조회."""
-        stmt = (
-            select(func.count())
-            .select_from(Item)
-            .where(Item.owner_id == owner_id)
-        )
+        stmt = select(func.count()).select_from(Item).where(Item.owner_id == owner_id)
         result = db.execute(stmt)
         return result.scalar_one()
 

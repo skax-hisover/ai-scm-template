@@ -26,7 +26,7 @@ target_metadata = Base.metadata
 
 def get_url() -> str:
     """데이터베이스 URL을 반환합니다."""
-    return settings.DATABASE_URL
+    return settings.database_url
 
 
 def run_migrations_offline() -> None:

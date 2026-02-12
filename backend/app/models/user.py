@@ -18,21 +18,11 @@ class User(TimestampMixin, Base):
 
     __tablename__ = "users"
 
-    email: Mapped[str] = mapped_column(
-        String(255), unique=True, index=True, nullable=False, comment="이메일"
-    )
-    hashed_password: Mapped[str] = mapped_column(
-        String(255), nullable=False, comment="해시된 비밀번호"
-    )
-    full_name: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, comment="이름"
-    )
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, default=True, nullable=False, comment="활성 상태"
-    )
-    is_superuser: Mapped[bool] = mapped_column(
-        Boolean, default=False, nullable=False, comment="관리자 여부"
-    )
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False, comment="이메일")
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False, comment="해시된 비밀번호")
+    full_name: Mapped[str | None] = mapped_column(String(255), nullable=True, comment="이름")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, comment="활성 상태")
+    is_superuser: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, comment="관리자 여부")
 
     # Relationships
     items: Mapped[list["Item"]] = relationship(  # type: ignore[name-defined]  # noqa: F821

@@ -21,12 +21,8 @@ class Item(TimestampMixin, Base):
 
     __tablename__ = "items"
 
-    title: Mapped[str] = mapped_column(
-        String(255), nullable=False, comment="제목"
-    )
-    description: Mapped[str | None] = mapped_column(
-        Text, nullable=True, comment="설명"
-    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False, comment="제목")
+    description: Mapped[str | None] = mapped_column(Text, nullable=True, comment="설명")
     owner_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),

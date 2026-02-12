@@ -21,7 +21,7 @@ from app.core.config import settings
 # - pool_size: 커넥션 풀 기본 크기
 # - max_overflow: 풀 초과 시 추가로 생성할 수 있는 최대 연결 수
 engine = create_engine(
-    settings.DATABASE_URL,
+    settings.database_url,
     pool_pre_ping=True,
     pool_size=10,
     max_overflow=20,

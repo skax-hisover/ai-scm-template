@@ -26,9 +26,7 @@ EXCLUDE_PATHS = {"/api/v1/health", "/docs", "/redoc", "/openapi.json"}
 class LoggingMiddleware(BaseHTTPMiddleware):
     """HTTP 요청/응답 로깅 미들웨어."""
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         # 제외 경로 스킵
         if request.url.path in EXCLUDE_PATHS:
             return await call_next(request)

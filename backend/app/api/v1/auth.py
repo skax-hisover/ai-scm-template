@@ -35,9 +35,7 @@ def login(
     Swagger UI에서 테스트할 때는 이 엔드포인트가 사용됩니다.
     username 필드에 이메일을 입력하세요.
     """
-    user = user_crud.authenticate(
-        db, email=form_data.username, password=form_data.password
-    )
+    user = user_crud.authenticate(db, email=form_data.username, password=form_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -64,9 +62,7 @@ def login_json(db: DbSession, login_data: LoginRequest) -> Token:
 
     OAuth2 form 대신 JSON body로 로그인합니다.
     """
-    user = user_crud.authenticate(
-        db, email=login_data.email, password=login_data.password
-    )
+    user = user_crud.authenticate(db, email=login_data.email, password=login_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
