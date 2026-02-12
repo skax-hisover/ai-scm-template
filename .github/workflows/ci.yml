@@ -1,0 +1,140 @@
+# ============================================================================
+# CI (지속적 통합) - PR 코드 품질 검증
+# ============================================================================
+# [트리거] develop, main 브랜치로의 Pull Request 생성/업데이트 시
+# [목적]   코드 품질만 검증 (배포 없음)
+#          - 백엔드: 린트(Ruff) → 포맷 체크(Ruff) → 테스트(Pytest)
+#          - 프론트엔드: 린트(ESLint) → 타입 체크(TSC) → 빌드 검증(Next.js)
+# ============================================================================
+
+name: CI - 코드 품질 검증
+
+on:
+  pull_request:
+    branches: [develop, main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ─── 변경 파일 감지 ────────────────────────────────────────
+  changes:
+    name: "🔍 변경 감지"
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+            frontend:
+              - 'frontend/**'
+
+  # ─── 백엔드 CI ────────────────────────────────────────────
+  backend:
+    name: "🐍 Backend CI"
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: 📥 코드 체크아웃
+        uses: actions/checkout@v4
+
+      - name: 🐍 Python 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 📦 uv 설치
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: 💾 의존성 캐시
+        uses: actions/cache@v4
+        with:
+          path: backend/.venv
+          key: backend-venv-${{ runner.os }}-${{ hashFiles('backend/pyproject.toml') }}
+          restore-keys: backend-venv-${{ runner.os }}-
+
+      - name: 📦 의존성 설치
+        run: uv sync
+
+      - name: 🔍 린트 검사 (Ruff)
+        run: uv run ruff check .
+
+      - name: 📝 포맷 검사 (Ruff)
+        run: uv run ruff format --check .
+
+      - name: 🧪 테스트 (Pytest)
+        env:
+          ENVIRONMENT: local
+          SECRET_KEY: test-secret-key-for-ci
+          POSTGRES_SERVER: localhost
+          POSTGRES_PORT: "5432"
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: test_db
+          FIRST_SUPERUSER: admin@test.com
+          FIRST_SUPERUSER_PASSWORD: testpassword123
+        run: uv run pytest --tb=short -q
+
+  # ─── 프론트엔드 CI ────────────────────────────────────────
+  frontend:
+    name: "📗 Frontend CI"
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: 📥 코드 체크아웃
+        uses: actions/checkout@v4
+
+      - name: 📗 Node.js 설정
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 📦 의존성 설치
+        run: npm ci
+
+      - name: 🔍 린트 검사 (ESLint)
+        run: npm run lint
+
+      - name: 🔎 타입 검사 (TypeScript)
+        run: npm run type-check
+
+      - name: 🏗️ 빌드 검증 (Next.js)
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8000
+        run: npm run build
