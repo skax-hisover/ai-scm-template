@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Docker 배포 시 standalone 모드로 빌드 (server.js 단독 실행 가능)
+  output: "standalone",
   // 백엔드 API 프록시 (CORS 문제 방지)
   async rewrites() {
     return [
