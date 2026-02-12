@@ -128,7 +128,7 @@ jobs:
 
       - name: 🔍 린트 & 타입 검사
         run: |
-          npm run lint
+          npx eslint . --max-warnings 0
           npm run type-check
 
       - name: 🏗️ 빌드 검증

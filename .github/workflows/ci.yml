@@ -129,7 +129,7 @@ jobs:
         run: npm ci
 
       - name: 🔍 린트 검사 (ESLint)
-        run: npm run lint
+        run: npx eslint . --max-warnings 0
 
       - name: 🔎 타입 검사 (TypeScript)
         run: npm run type-check
