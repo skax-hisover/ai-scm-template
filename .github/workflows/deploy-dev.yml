@@ -3,25 +3,33 @@
 # ============================================================================
 # [트리거] develop 브랜치에 push (feature/* → develop 머지 시점)
 #
-# [파이프라인 — 5단계]
-#  ┌─────────────┐  ┌──────────────┐
-#  │ backend-check│  │frontend-check│   ← 1) 코드 품질 검증
-#  └──────┬───────┘  └──────┬───────┘
-#         └───────┬──────────┘
+# [파이프라인 — 6단계]
+#  ┌──────────┐
+#  │  setup   │                         ← 0) 레지스트리 자동 감지 (ACR or GHCR)
+#  └────┬─────┘
+#  ┌────▼────────┐  ┌──────────────┐
+#  │backend-check│  │frontend-check│    ← 1) 코드 품질 검증
+#  └──────┬──────┘  └──────┬───────┘
+#         └───────┬────────┘
 #          ┌──────▼───────┐
-#          │   docker     │             ← 2) ACR 이미지 빌드 & Push
+#          │   docker     │             ← 2) 이미지 빌드 & Push (ACR 또는 GHCR)
 #          └──────┬───────┘
 #          ┌──────▼───────┐
 #          │ check-image  │             ← 3) Trivy 보안 스캔
 #          └──────┬───────┘
 #          ┌──────▼───────┐
-#          │   deploy     │             ← 4) AKS Kustomize 배포
+#          │   deploy     │             ← 4) AKS 배포 (ACR 설정 시에만)
 #          └──────┬───────┘
 #          ┌──────▼───────┐
 #          │ slack-notify │             ← 5) Slack 결과 알림
 #          └──────────────┘
 #
+# [레지스트리 자동 감지]
+#  - ACR Secrets 설정됨  → ACR로 Push + AKS 배포 실행
+#  - ACR Secrets 미설정  → GHCR로 Push + AKS 배포 건너뜀
+#
 # [필요 GitHub Secrets / Variables]
+#  ── ACR + AKS 배포 시 (선택: 인프라 준비 후 등록) ──
 #  Secrets:
 #   AZURE_CREDENTIALS      — az ad sp create-for-rbac --sdk-auth 결과 JSON
 #   ACR_LOGIN_SERVER        — myacr.azurecr.io
@@ -46,13 +54,41 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
-  BACKEND_IMAGE:    ${{ secrets.ACR_LOGIN_SERVER }}/ai-scm/backend
-  FRONTEND_IMAGE:   ${{ secrets.ACR_LOGIN_SERVER }}/ai-scm/frontend
-  K8S_NAMESPACE:    ${{ vars.K8S_NAMESPACE_DEV || 'ai-scm-dev' }}
+  K8S_NAMESPACE: ${{ vars.K8S_NAMESPACE_DEV || 'ai-scm-dev' }}
 
 # ═════════════════════════════════════════════════════════════════════════════
 jobs:
+
+  # ─────────────────────────────────────────────────────────────
+  # 0) 레지스트리 자동 감지 (ACR vs GHCR)
+  # ─────────────────────────────────────────────────────────────
+  setup:
+    name: "⚙️ 환경 설정"
+    runs-on: ubuntu-latest
+    outputs:
+      use-acr:        ${{ steps.detect.outputs.use_acr }}
+      registry:       ${{ steps.detect.outputs.registry }}
+      backend-image:  ${{ steps.detect.outputs.backend_image }}
+      frontend-image: ${{ steps.detect.outputs.frontend_image }}
+    steps:
+      - name: 🔍 레지스트리 감지
+        id: detect
+        run: |
+          if [ -n "$ACR_SERVER" ]; then
+            echo "✅ ACR 설정 감지 → ACR 사용"
+            echo "use_acr=true"                                        >> "$GITHUB_OUTPUT"
+            echo "registry=${ACR_SERVER}"                              >> "$GITHUB_OUTPUT"
+            echo "backend_image=${ACR_SERVER}/ai-scm/backend"          >> "$GITHUB_OUTPUT"
+            echo "frontend_image=${ACR_SERVER}/ai-scm/frontend"        >> "$GITHUB_OUTPUT"
+          else
+            echo "⚠️ ACR 미설정 → GHCR 폴백"
+            echo "use_acr=false"                                       >> "$GITHUB_OUTPUT"
+            echo "registry=ghcr.io"                                    >> "$GITHUB_OUTPUT"
+            echo "backend_image=ghcr.io/${{ github.repository }}/backend"  >> "$GITHUB_OUTPUT"
+            echo "frontend_image=ghcr.io/${{ github.repository }}/frontend" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          ACR_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
 
   # ─────────────────────────────────────────────────────────────
   # 1-A) 백엔드 코드 품질 검증
@@ -151,12 +187,15 @@ jobs:
         run: npm run build
 
   # ─────────────────────────────────────────────────────────────
-  # 2) Docker 이미지 빌드 → ACR Push
+  # 2) Docker 이미지 빌드 & Push (ACR 또는 GHCR)
   # ─────────────────────────────────────────────────────────────
   docker:
-    name: "🐳 Docker 빌드 & ACR Push"
+    name: "🐳 Docker 빌드 & Push"
     runs-on: ubuntu-latest
-    needs: [backend-check, frontend-check]
+    needs: [setup, backend-check, frontend-check]
+    permissions:
+      contents: read
+      packages: write
     outputs:
       image-tag: ${{ steps.meta.outputs.tag }}
 
@@ -164,12 +203,23 @@ jobs:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
 
+      # ── ACR 로그인 (ACR 설정 시) ──
       - name: 🔑 ACR 로그인
+        if: needs.setup.outputs.use-acr == 'true'
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.ACR_LOGIN_SERVER }}
+          registry: ${{ needs.setup.outputs.registry }}
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
+
+      # ── GHCR 로그인 (ACR 미설정 시 폴백) ──
+      - name: 🔑 GHCR 로그인
+        if: needs.setup.outputs.use-acr == 'false'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 🏷️ 이미지 태그 생성
         id: meta
@@ -184,8 +234,8 @@ jobs:
           file: backend/Dockerfile
           push: true
           tags: |
-            ${{ env.BACKEND_IMAGE }}:dev
-            ${{ env.BACKEND_IMAGE }}:${{ steps.meta.outputs.tag }}
+            ${{ needs.setup.outputs.backend-image }}:dev
+            ${{ needs.setup.outputs.backend-image }}:${{ steps.meta.outputs.tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -198,8 +248,8 @@ jobs:
           build-args: |
             NEXT_PUBLIC_API_URL=${{ vars.DEV_API_URL || 'http://localhost:8000' }}
           tags: |
-            ${{ env.FRONTEND_IMAGE }}:dev
-            ${{ env.FRONTEND_IMAGE }}:${{ steps.meta.outputs.tag }}
+            ${{ needs.setup.outputs.frontend-image }}:dev
+            ${{ needs.setup.outputs.frontend-image }}:${{ steps.meta.outputs.tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -209,20 +259,34 @@ jobs:
   check-image:
     name: "🔒 이미지 보안 스캔"
     runs-on: ubuntu-latest
-    needs: docker
+    needs: [setup, docker]
+    permissions:
+      contents: read
+      packages: read
 
     steps:
+      # ── ACR 로그인 ──
       - name: 🔑 ACR 로그인
+        if: needs.setup.outputs.use-acr == 'true'
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.ACR_LOGIN_SERVER }}
+          registry: ${{ needs.setup.outputs.registry }}
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
+
+      # ── GHCR 로그인 ──
+      - name: 🔑 GHCR 로그인
+        if: needs.setup.outputs.use-acr == 'false'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 🔍 백엔드 이미지 스캔
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: "${{ env.BACKEND_IMAGE }}:${{ needs.docker.outputs.image-tag }}"
+          image-ref: "${{ needs.setup.outputs.backend-image }}:${{ needs.docker.outputs.image-tag }}"
           format: "table"
           exit-code: "0"              # 개발: 경고만 (배포 차단 안 함)
           severity: "CRITICAL,HIGH"
@@ -230,18 +294,19 @@ jobs:
       - name: 🔍 프론트엔드 이미지 스캔
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: "${{ env.FRONTEND_IMAGE }}:${{ needs.docker.outputs.image-tag }}"
+          image-ref: "${{ needs.setup.outputs.frontend-image }}:${{ needs.docker.outputs.image-tag }}"
           format: "table"
           exit-code: "0"
           severity: "CRITICAL,HIGH"
 
   # ─────────────────────────────────────────────────────────────
-  # 4) AKS 개발 환경 배포 (Kustomize + Traefik)
+  # 4) AKS 개발 환경 배포 (ACR 설정 시에만 실행)
   # ─────────────────────────────────────────────────────────────
   deploy:
     name: "🚀 AKS 개발 환경 배포"
     runs-on: ubuntu-latest
-    needs: [docker, check-image]
+    needs: [setup, docker, check-image]
+    if: needs.setup.outputs.use-acr == 'true'
 
     steps:
       - uses: actions/checkout@v4
@@ -263,8 +328,8 @@ jobs:
 
           # CI에서 생성한 태그로 이미지 교체
           kustomize edit set image \
-            backend=${{ env.BACKEND_IMAGE }}:${{ needs.docker.outputs.image-tag }} \
-            frontend=${{ env.FRONTEND_IMAGE }}:${{ needs.docker.outputs.image-tag }}
+            backend=${{ needs.setup.outputs.backend-image }}:${{ needs.docker.outputs.image-tag }} \
+            frontend=${{ needs.setup.outputs.frontend-image }}:${{ needs.docker.outputs.image-tag }}
 
           # 네임스페이스 생성 (없으면)
           kubectl create namespace ${{ env.K8S_NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
@@ -302,17 +367,18 @@ jobs:
   slack-notification:
     name: "📢 Slack 알림"
     runs-on: ubuntu-latest
-    needs: [docker, check-image, deploy]
+    needs: [setup, docker, check-image, deploy]
     if: always()
 
     steps:
       - name: 📢 Slack 알림 전송
         uses: 8398a7/action-slack@v3
         with:
-          status: ${{ needs.deploy.result }}
+          status: ${{ needs.deploy.result == 'skipped' && needs.docker.result || needs.deploy.result }}
           fields: repo,message,commit,author,ref,workflow
           text: |
-            *[DEV] 배포 ${{ needs.deploy.result == 'success' && '✅ 성공' || '❌ 실패' }}*
+            *[DEV] ${{ needs.setup.outputs.use-acr == 'true' && '배포' || '빌드' }} ${{ (needs.deploy.result == 'skipped' ? needs.docker.result : needs.deploy.result) == 'success' && '✅ 성공' || '❌ 실패' }}*
+            • 레지스트리: `${{ needs.setup.outputs.registry }}`
             • 이미지: `${{ needs.docker.outputs.image-tag }}`
             • 커밋: `${{ github.event.head_commit.message }}`
             • 작성자: ${{ github.actor }}
