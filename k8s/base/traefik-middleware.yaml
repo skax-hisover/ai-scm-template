@@ -1,0 +1,52 @@
+# ============================================================================
+# Traefik Middleware
+# ============================================================================
+# /api/* 요청에서 prefix를 유지한 채 backend로 전달
+# 필요에 따라 rate-limit, cors, headers 등 추가 가능
+# ============================================================================
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: api-strip-prefix
+  labels:
+    app.kubernetes.io/part-of: ai-scm
+spec:
+  stripPrefix:
+    prefixes:
+      - /api
+    forceSlash: false
+---
+# CORS 미들웨어 (프론트엔드 ↔ 백엔드 통신용)
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: cors-headers
+  labels:
+    app.kubernetes.io/part-of: ai-scm
+spec:
+  headers:
+    accessControlAllowMethods:
+      - "GET"
+      - "POST"
+      - "PUT"
+      - "DELETE"
+      - "OPTIONS"
+    accessControlAllowOriginList:
+      - "*"                             # overlay에서 특정 도메인으로 제한
+    accessControlAllowHeaders:
+      - "Content-Type"
+      - "Authorization"
+    accessControlMaxAge: 3600
+---
+# Rate Limit 미들웨어 (선택)
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: rate-limit
+  labels:
+    app.kubernetes.io/part-of: ai-scm
+spec:
+  rateLimit:
+    average: 100
+    burst: 200
+    period: 1m

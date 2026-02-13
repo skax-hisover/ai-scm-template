@@ -1,26 +1,49 @@
 # ============================================================================
-# CD - develop 브랜치 (개발/스테이징 환경 배포)
+# CD — develop 브랜치 → AKS 개발 환경 배포
 # ============================================================================
-# [트리거] develop 브랜치에 push 시 (feature/* → develop 머지 시점)
-# [목적]   개발/스테이징 환경에 최신 코드를 자동 배포
+# [트리거] develop 브랜치에 push (feature/* → develop 머지 시점)
 #
-# [흐름]
-# 1. 코드 품질 검증 (린트, 테스트)
-# 2. Docker 이미지 빌드 (dev 태그)
-# 3. GitHub Container Registry에 push
-# 4. (선택) 개발 서버에 배포
+# [파이프라인 — 6단계]
+#  ┌──────────┐
+#  │  setup   │                         ← 0) 레지스트리 자동 감지 (ACR or GHCR)
+#  └────┬─────┘
+#  ┌────▼────────┐  ┌──────────────┐
+#  │backend-check│  │frontend-check│    ← 1) 코드 품질 검증
+#  └──────┬──────┘  └──────┬───────┘
+#         └───────┬────────┘
+#          ┌──────▼───────┐
+#          │   docker     │             ← 2) 이미지 빌드 & Push (ACR 또는 GHCR)
+#          └──────┬───────┘
+#          ┌──────▼───────┐
+#          │ check-image  │             ← 3) Trivy 보안 스캔
+#          └──────┬───────┘
+#          ┌──────▼───────┐
+#          │   deploy     │             ← 4) AKS 배포 (ACR 설정 시에만)
+#          └──────┬───────┘
+#          ┌──────▼───────┐
+#          │ slack-notify │             ← 5) Slack 결과 알림
+#          └──────────────┘
 #
-# [필요 설정]
-# - Repository Settings → Actions → General → Workflow permissions
-#   → "Read and write permissions" 체크
+# [레지스트리 자동 감지]
+#  - ACR Secrets 설정됨  → ACR로 Push + AKS 배포 실행
+#  - ACR Secrets 미설정  → GHCR로 Push + AKS 배포 건너뜀
 #
-# [Azure 배포 시 추가 설정]
-# - Secrets: AZURE_CREDENTIALS (서비스 주체 JSON)
-# - Variables: DEV_RESOURCE_GROUP, DEV_BACKEND_APP, DEV_FRONTEND_APP
-# - Azure Container Apps 또는 Azure App Service 사용
+# [필요 GitHub Secrets / Variables]
+#  ── ACR + AKS 배포 시 (선택: 인프라 준비 후 등록) ──
+#  Secrets:
+#   AZURE_CREDENTIALS      — az ad sp create-for-rbac --sdk-auth 결과 JSON
+#   ACR_LOGIN_SERVER        — myacr.azurecr.io
+#   ACR_USERNAME            — ACR 사용자명
+#   ACR_PASSWORD            — ACR 비밀번호
+#   SLACK_WEBHOOK_URL       — Slack Incoming Webhook URL (선택)
+#  Variables:
+#   AKS_RESOURCE_GROUP      — AKS 리소스 그룹
+#   AKS_CLUSTER_NAME_DEV    — 개발 AKS 클러스터명
+#   K8S_NAMESPACE_DEV       — 네임스페이스 (기본 ai-scm-dev)
+#   DEV_API_URL             — 프론트엔드 빌드 시 NEXT_PUBLIC_API_URL
 # ============================================================================
 
-name: CD - develop 배포
+name: CD — develop 배포
 
 on:
   push:
@@ -31,12 +54,45 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  REGISTRY: ghcr.io
-  BACKEND_IMAGE: ghcr.io/${{ github.repository }}/backend
-  FRONTEND_IMAGE: ghcr.io/${{ github.repository }}/frontend
+  K8S_NAMESPACE: ${{ vars.K8S_NAMESPACE_DEV || 'ai-scm-dev' }}
 
+# ═════════════════════════════════════════════════════════════════════════════
 jobs:
-  # ─── 백엔드 검증 ──────────────────────────────────────────
+
+  # ─────────────────────────────────────────────────────────────
+  # 0) 레지스트리 자동 감지 (ACR vs GHCR)
+  # ─────────────────────────────────────────────────────────────
+  setup:
+    name: "⚙️ 환경 설정"
+    runs-on: ubuntu-latest
+    outputs:
+      use-acr:        ${{ steps.detect.outputs.use_acr }}
+      registry:       ${{ steps.detect.outputs.registry }}
+      backend-image:  ${{ steps.detect.outputs.backend_image }}
+      frontend-image: ${{ steps.detect.outputs.frontend_image }}
+    steps:
+      - name: 🔍 레지스트리 감지
+        id: detect
+        run: |
+          if [ -n "$ACR_SERVER" ]; then
+            echo "✅ ACR 설정 감지 → ACR 사용"
+            echo "use_acr=true"                                        >> "$GITHUB_OUTPUT"
+            echo "registry=${ACR_SERVER}"                              >> "$GITHUB_OUTPUT"
+            echo "backend_image=${ACR_SERVER}/ai-scm/backend"          >> "$GITHUB_OUTPUT"
+            echo "frontend_image=${ACR_SERVER}/ai-scm/frontend"        >> "$GITHUB_OUTPUT"
+          else
+            echo "⚠️ ACR 미설정 → GHCR 폴백"
+            echo "use_acr=false"                                       >> "$GITHUB_OUTPUT"
+            echo "registry=ghcr.io"                                    >> "$GITHUB_OUTPUT"
+            echo "backend_image=ghcr.io/${{ github.repository }}/backend"  >> "$GITHUB_OUTPUT"
+            echo "frontend_image=ghcr.io/${{ github.repository }}/frontend" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          ACR_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
+
+  # ─────────────────────────────────────────────────────────────
+  # 1-A) 백엔드 코드 품질 검증
+  # ─────────────────────────────────────────────────────────────
   backend-check:
     name: "🐍 Backend 검증"
     runs-on: ubuntu-latest
@@ -98,7 +154,9 @@ jobs:
           FIRST_SUPERUSER_PASSWORD: testpassword123
         run: uv run pytest --tb=short -q
 
-  # ─── 프론트엔드 검증 ──────────────────────────────────────
+  # ─────────────────────────────────────────────────────────────
+  # 1-B) 프론트엔드 코드 품질 검증
+  # ─────────────────────────────────────────────────────────────
   frontend-check:
     name: "📗 Frontend 검증"
     runs-on: ubuntu-latest
@@ -128,31 +186,46 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:8000
         run: npm run build
 
-  # ─── Docker 이미지 빌드 & Push (dev 태그) ──────────────────
-  build-backend:
-    name: "🐳 Backend 이미지 (dev)"
+  # ─────────────────────────────────────────────────────────────
+  # 2) Docker 이미지 빌드 & Push (ACR 또는 GHCR)
+  # ─────────────────────────────────────────────────────────────
+  docker:
+    name: "🐳 Docker 빌드 & Push"
     runs-on: ubuntu-latest
-    needs: [backend-check, frontend-check]
+    needs: [setup, backend-check, frontend-check]
     permissions:
       contents: read
       packages: write
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tag }}
 
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
 
-      - name: 🔑 GHCR 로그인
+      # ── ACR 로그인 (ACR 설정 시) ──
+      - name: 🔑 ACR 로그인
+        if: needs.setup.outputs.use-acr == 'true'
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ${{ needs.setup.outputs.registry }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      # ── GHCR 로그인 (ACR 미설정 시 폴백) ──
+      - name: 🔑 GHCR 로그인
+        if: needs.setup.outputs.use-acr == 'false'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 🏷️ 태그 메타데이터
+      - name: 🏷️ 이미지 태그 생성
         id: meta
         run: |
-          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
-          echo "tag=dev-${SHORT_SHA}" >> $GITHUB_OUTPUT
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "tag=dev-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
 
       - name: 🐍 백엔드 이미지 빌드 & Push
         uses: docker/build-push-action@v6
@@ -161,35 +234,10 @@ jobs:
           file: backend/Dockerfile
           push: true
           tags: |
-            ${{ env.BACKEND_IMAGE }}:dev
-            ${{ env.BACKEND_IMAGE }}:${{ steps.meta.outputs.tag }}
+            ${{ needs.setup.outputs.backend-image }}:dev
+            ${{ needs.setup.outputs.backend-image }}:${{ steps.meta.outputs.tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-  build-frontend:
-    name: "🐳 Frontend 이미지 (dev)"
-    runs-on: ubuntu-latest
-    needs: [backend-check, frontend-check]
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-
-      - name: 🔑 GHCR 로그인
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: 🏷️ 태그 메타데이터
-        id: meta
-        run: |
-          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
-          echo "tag=dev-${SHORT_SHA}" >> $GITHUB_OUTPUT
 
       - name: 📗 프론트엔드 이미지 빌드 & Push
         uses: docker/build-push-action@v6
@@ -200,92 +248,140 @@ jobs:
           build-args: |
             NEXT_PUBLIC_API_URL=${{ vars.DEV_API_URL || 'http://localhost:8000' }}
           tags: |
-            ${{ env.FRONTEND_IMAGE }}:dev
-            ${{ env.FRONTEND_IMAGE }}:${{ steps.meta.outputs.tag }}
+            ${{ needs.setup.outputs.frontend-image }}:dev
+            ${{ needs.setup.outputs.frontend-image }}:${{ steps.meta.outputs.tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ─── 배포 요약 ────────────────────────────────────────────
-  summary:
-    name: "📋 배포 요약"
+  # ─────────────────────────────────────────────────────────────
+  # 3) 이미지 보안 스캔 (Trivy)
+  # ─────────────────────────────────────────────────────────────
+  check-image:
+    name: "🔒 이미지 보안 스캔"
     runs-on: ubuntu-latest
-    needs: [build-backend, build-frontend]
-    if: always()
-    steps:
-      - name: 📋 결과 출력
-        run: |
-          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
-          echo "## 🚀 develop 배포 결과" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| 항목 | 값 |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|-----|" >> $GITHUB_STEP_SUMMARY
-          echo "| 브랜치 | \`develop\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| 커밋 | \`${SHORT_SHA}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Backend 이미지 | \`${{ env.BACKEND_IMAGE }}:dev-${SHORT_SHA}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Frontend 이미지 | \`${{ env.FRONTEND_IMAGE }}:dev-${SHORT_SHA}\` |" >> $GITHUB_STEP_SUMMARY
+    needs: [setup, docker]
+    permissions:
+      contents: read
+      packages: read
 
-  # ─── Azure 개발 환경 배포 (서버 준비 시 주석 해제) ──────────
-  #
-  # [사전 준비]
-  # 1. Azure CLI로 서비스 주체 생성:
-  #    az ad sp create-for-rbac --name "github-actions-dev" \
-  #      --role contributor \
-  #      --scopes /subscriptions/{subscription-id}/resourceGroups/{resource-group} \
-  #      --sdk-auth
-  #
-  # 2. 출력된 JSON을 GitHub Secret 'AZURE_CREDENTIALS'에 등록
-  #
-  # 3. GitHub Variables 등록:
-  #    - DEV_RESOURCE_GROUP: Azure 리소스 그룹명
-  #    - DEV_BACKEND_APP: 백엔드 Container App 이름
-  #    - DEV_FRONTEND_APP: 프론트엔드 Container App 이름
-  #
-  # ── 방법 1: Azure Container Apps (권장) ──
-  # deploy-azure:
-  #   name: "☁️ Azure 개발 환경 배포"
-  #   runs-on: ubuntu-latest
-  #   needs: [build-backend, build-frontend]
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #
-  #     - name: 🔑 Azure 로그인
-  #       uses: azure/login@v2
-  #       with:
-  #         creds: ${{ secrets.AZURE_CREDENTIALS }}
-  #
-  #     - name: 🐍 백엔드 배포 (Container Apps)
-  #       uses: azure/container-apps-deploy-action@v1
-  #       with:
-  #         resourceGroup: ${{ vars.DEV_RESOURCE_GROUP }}
-  #         containerAppName: ${{ vars.DEV_BACKEND_APP }}
-  #         imageToDeploy: ${{ env.BACKEND_IMAGE }}:dev
-  #
-  #     - name: 📗 프론트엔드 배포 (Container Apps)
-  #       uses: azure/container-apps-deploy-action@v1
-  #       with:
-  #         resourceGroup: ${{ vars.DEV_RESOURCE_GROUP }}
-  #         containerAppName: ${{ vars.DEV_FRONTEND_APP }}
-  #         imageToDeploy: ${{ env.FRONTEND_IMAGE }}:dev
-  #
-  # ── 방법 2: Azure App Service (Web App for Containers) ──
-  # deploy-appservice:
-  #   name: "☁️ Azure App Service 배포"
-  #   runs-on: ubuntu-latest
-  #   needs: [build-backend, build-frontend]
-  #   steps:
-  #     - name: 🔑 Azure 로그인
-  #       uses: azure/login@v2
-  #       with:
-  #         creds: ${{ secrets.AZURE_CREDENTIALS }}
-  #
-  #     - name: 🐍 백엔드 배포
-  #       uses: azure/webapps-deploy@v3
-  #       with:
-  #         app-name: ${{ vars.DEV_BACKEND_APP }}
-  #         images: ${{ env.BACKEND_IMAGE }}:dev
-  #
-  #     - name: 📗 프론트엔드 배포
-  #       uses: azure/webapps-deploy@v3
-  #       with:
-  #         app-name: ${{ vars.DEV_FRONTEND_APP }}
-  #         images: ${{ env.FRONTEND_IMAGE }}:dev
+    steps:
+      # ── ACR 로그인 ──
+      - name: 🔑 ACR 로그인
+        if: needs.setup.outputs.use-acr == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ needs.setup.outputs.registry }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      # ── GHCR 로그인 ──
+      - name: 🔑 GHCR 로그인
+        if: needs.setup.outputs.use-acr == 'false'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🔍 백엔드 이미지 스캔
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "${{ needs.setup.outputs.backend-image }}:${{ needs.docker.outputs.image-tag }}"
+          format: "table"
+          exit-code: "0"              # 개발: 경고만 (배포 차단 안 함)
+          severity: "CRITICAL,HIGH"
+
+      - name: 🔍 프론트엔드 이미지 스캔
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "${{ needs.setup.outputs.frontend-image }}:${{ needs.docker.outputs.image-tag }}"
+          format: "table"
+          exit-code: "0"
+          severity: "CRITICAL,HIGH"
+
+  # ─────────────────────────────────────────────────────────────
+  # 4) AKS 개발 환경 배포 (ACR 설정 시에만 실행)
+  # ─────────────────────────────────────────────────────────────
+  deploy:
+    name: "🚀 AKS 개발 환경 배포"
+    runs-on: ubuntu-latest
+    needs: [setup, docker, check-image]
+    if: needs.setup.outputs.use-acr == 'true'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🔑 Azure 로그인
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: 🔑 AKS 자격 증명 설정
+        uses: azure/aks-set-context@v4
+        with:
+          resource-group: ${{ vars.AKS_RESOURCE_GROUP }}
+          cluster-name: ${{ vars.AKS_CLUSTER_NAME_DEV }}
+
+      - name: 📦 Kustomize 이미지 교체 & 배포
+        run: |
+          cd k8s/overlays/dev
+
+          # CI에서 생성한 태그로 이미지 교체
+          kustomize edit set image \
+            backend=${{ needs.setup.outputs.backend-image }}:${{ needs.docker.outputs.image-tag }} \
+            frontend=${{ needs.setup.outputs.frontend-image }}:${{ needs.docker.outputs.image-tag }}
+
+          # 네임스페이스 생성 (없으면)
+          kubectl create namespace ${{ env.K8S_NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+
+          # Kustomize 배포 적용
+          kubectl apply -k .
+
+          # 롤아웃 완료 대기
+          kubectl rollout status deployment/backend  -n ${{ env.K8S_NAMESPACE }} --timeout=120s
+          kubectl rollout status deployment/frontend -n ${{ env.K8S_NAMESPACE }} --timeout=120s
+
+      - name: ✅ 배포 상태 확인
+        if: always()
+        run: |
+          echo "## 🚀 개발 환경 배포 상태" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| 항목 | 값 |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|------|-----|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| 이미지 태그 | \`${{ needs.docker.outputs.image-tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| 네임스페이스 | \`${{ env.K8S_NAMESPACE }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Pods" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          kubectl get pods -n ${{ env.K8S_NAMESPACE }} -o wide 2>&1 >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Services" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          kubectl get svc -n ${{ env.K8S_NAMESPACE }} 2>&1 >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────────────────────────────────────────
+  # 5) Slack 결과 알림
+  # ─────────────────────────────────────────────────────────────
+  slack-notification:
+    name: "📢 Slack 알림"
+    runs-on: ubuntu-latest
+    needs: [setup, docker, check-image, deploy]
+    if: always()
+
+    steps:
+      - name: 📢 Slack 알림 전송
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ needs.deploy.result == 'skipped' && needs.docker.result || needs.deploy.result }}
+          fields: repo,message,commit,author,ref,workflow
+          text: |
+            *[DEV] ${{ needs.setup.outputs.use-acr == 'true' && '배포' || '빌드' }} ${{ (needs.deploy.result == 'skipped' && needs.docker.result || needs.deploy.result) == 'success' && '✅ 성공' || '❌ 실패' }}*
+            • 레지스트리: `${{ needs.setup.outputs.registry }}`
+            • 이미지: `${{ needs.docker.outputs.image-tag }}`
+            • 커밋: `${{ github.event.head_commit.message }}`
+            • 작성자: ${{ github.actor }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        continue-on-error: true        # Webhook 미설정 시에도 워크플로우 실패 방지
