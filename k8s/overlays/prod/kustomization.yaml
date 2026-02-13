@@ -1,0 +1,111 @@
+# ============================================================================
+# Kustomize Overlay — 프로덕션(Prod) 환경
+# ============================================================================
+# 도메인:    ai-scm.example.com
+# 네임스페이스: ai-scm-prod
+# 레플리카:   backend 3, frontend 2
+# ============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ai-scm-prod
+
+resources:
+  - ../../base
+
+# ── 이미지 (CI/CD에서 kustomize edit set image 로 동적 교체) ──
+images:
+  - name: backend
+    newName: PLACEHOLDER.azurecr.io/ai-scm/backend
+    newTag: latest
+  - name: frontend
+    newName: PLACEHOLDER.azurecr.io/ai-scm/frontend
+    newTag: latest
+
+# ── 환경별 패치 ──
+patches:
+  # 네임스페이스 이름 변경
+  - target:
+      kind: Namespace
+      name: ai-scm
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: ai-scm-prod
+
+  # 백엔드 레플리카 3개 (프로덕션)
+  - target:
+      kind: Deployment
+      name: backend
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 3
+
+  # 프론트엔드 레플리카 2개 (프로덕션)
+  - target:
+      kind: Deployment
+      name: frontend
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 2
+
+  # 백엔드 리소스 상향 (프로덕션)
+  - target:
+      kind: Deployment
+      name: backend
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+
+  # Traefik IngressRoute — 프로덕션 도메인
+  - target:
+      kind: IngressRoute
+      name: ai-scm-http
+    patch: |
+      - op: replace
+        path: /spec/routes/0/match
+        value: "Host(`ai-scm.example.com`)"
+
+  - target:
+      kind: IngressRoute
+      name: ai-scm-https
+    patch: |
+      - op: replace
+        path: /spec/routes/0/match
+        value: "Host(`ai-scm.example.com`) && PathPrefix(`/api`)"
+      - op: replace
+        path: /spec/routes/1/match
+        value: "Host(`ai-scm.example.com`)"
+      - op: replace
+        path: /spec/tls/secretName
+        value: ai-scm-prod-tls
+
+  # CORS 미들웨어 — 프로덕션 도메인만 허용
+  - target:
+      kind: Middleware
+      name: cors-headers
+    patch: |
+      - op: replace
+        path: /spec/headers/accessControlAllowOriginList
+        value:
+          - "https://ai-scm.example.com"
+
+# ── ConfigMap (환경 변수) ──
+configMapGenerator:
+  - name: backend-config
+    literals:
+      - ENVIRONMENT=production
+      - LOG_LEVEL=WARNING
+      - POSTGRES_SERVER=postgres-prod
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=ai_scm_prod
+      - FRONTEND_HOST=https://ai-scm.example.com

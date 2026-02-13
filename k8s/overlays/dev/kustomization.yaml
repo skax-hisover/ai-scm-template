@@ -1,0 +1,86 @@
+# ============================================================================
+# Kustomize Overlay — 개발(Dev) 환경
+# ============================================================================
+# 도메인:    dev.ai-scm.example.com
+# 네임스페이스: ai-scm-dev
+# 레플리카:   backend 1, frontend 1
+# ============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ai-scm-dev
+
+resources:
+  - ../../base
+
+# ── 이미지 (CI/CD에서 kustomize edit set image 로 동적 교체) ──
+images:
+  - name: backend
+    newName: PLACEHOLDER.azurecr.io/ai-scm/backend
+    newTag: dev
+  - name: frontend
+    newName: PLACEHOLDER.azurecr.io/ai-scm/frontend
+    newTag: dev
+
+# ── 환경별 패치 ──
+patches:
+  # 네임스페이스 이름 변경
+  - target:
+      kind: Namespace
+      name: ai-scm
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: ai-scm-dev
+
+  # 백엔드 레플리카 1개 (개발)
+  - target:
+      kind: Deployment
+      name: backend
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 1
+
+  # 프론트엔드 레플리카 1개 (개발)
+  - target:
+      kind: Deployment
+      name: frontend
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 1
+
+  # Traefik IngressRoute — 개발 도메인
+  - target:
+      kind: IngressRoute
+      name: ai-scm-http
+    patch: |
+      - op: replace
+        path: /spec/routes/0/match
+        value: "Host(`dev.ai-scm.example.com`)"
+
+  - target:
+      kind: IngressRoute
+      name: ai-scm-https
+    patch: |
+      - op: replace
+        path: /spec/routes/0/match
+        value: "Host(`dev.ai-scm.example.com`) && PathPrefix(`/api`)"
+      - op: replace
+        path: /spec/routes/1/match
+        value: "Host(`dev.ai-scm.example.com`)"
+      - op: replace
+        path: /spec/tls/secretName
+        value: ai-scm-dev-tls
+
+# ── ConfigMap (환경 변수) ──
+configMapGenerator:
+  - name: backend-config
+    literals:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=DEBUG
+      - POSTGRES_SERVER=postgres-dev
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=ai_scm_dev
+      - FRONTEND_HOST=https://dev.ai-scm.example.com

@@ -1,0 +1,10 @@
+# ============================================================================
+# Namespace
+# - overlay(dev/prod)에서 이름을 덮어씁니다.
+# ============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-scm          # overlay에서 ai-scm-dev / ai-scm-prod로 변경
+  labels:
+    app.kubernetes.io/part-of: ai-scm

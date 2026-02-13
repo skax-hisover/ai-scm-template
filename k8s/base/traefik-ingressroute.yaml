@@ -1,0 +1,76 @@
+# ============================================================================
+# Traefik IngressRoute (NGINX Ingress 대체)
+# ============================================================================
+# Traefik CRD를 사용한 라우팅 규칙
+#   /api/*  → backend:8000  (API 서버)
+#   /*      → frontend:3000 (Next.js)
+#
+# [참고] Traefik CRD 설치가 필요합니다:
+#   helm repo add traefik https://traefik.github.io/charts
+#   helm install traefik traefik/traefik -n traefik --create-namespace
+# ============================================================================
+
+# ── HTTP → HTTPS 리다이렉트 (프로덕션용) ──
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-https
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+
+---
+# ── HTTP 엔트리포인트 (80) ──
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: ai-scm-http
+  labels:
+    app.kubernetes.io/part-of: ai-scm
+spec:
+  entryPoints:
+    - web                              # Traefik HTTP 엔트리포인트 (포트 80)
+  routes:
+    # HTTP → HTTPS 리다이렉트 (overlay에서 미들웨어 추가/제거로 제어)
+    - match: "Host(`ai-scm.example.com`)"    # overlay에서 덮어쓰기
+      kind: Rule
+      middlewares:
+        - name: redirect-https
+      services:
+        - name: frontend
+          port: 3000
+
+---
+# ── HTTPS 엔트리포인트 (443) ──
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: ai-scm-https
+  labels:
+    app.kubernetes.io/part-of: ai-scm
+spec:
+  entryPoints:
+    - websecure                        # Traefik HTTPS 엔트리포인트 (포트 443)
+  # TLS 인증서 (cert-manager 또는 Traefik ACME 사용)
+  # overlay에서 secretName을 환경별로 지정
+  tls:
+    secretName: ai-scm-tls             # overlay에서 덮어쓰기
+  routes:
+    # ── /api/* → Backend ──
+    - match: "Host(`ai-scm.example.com`) && PathPrefix(`/api`)"
+      kind: Rule
+      middlewares:
+        - name: cors-headers
+        - name: rate-limit
+      services:
+        - name: backend
+          port: 8000
+
+    # ── /* → Frontend ──
+    - match: "Host(`ai-scm.example.com`)"
+      kind: Rule
+      priority: 1                      # /api보다 낮은 우선순위
+      services:
+        - name: frontend
+          port: 3000
