@@ -377,7 +377,7 @@ jobs:
           status: ${{ needs.deploy.result == 'skipped' && needs.docker.result || needs.deploy.result }}
           fields: repo,message,commit,author,ref,workflow
           text: |
-            *[DEV] ${{ needs.setup.outputs.use-acr == 'true' && '배포' || '빌드' }} ${{ (needs.deploy.result == 'skipped' ? needs.docker.result : needs.deploy.result) == 'success' && '✅ 성공' || '❌ 실패' }}*
+            *[DEV] ${{ needs.setup.outputs.use-acr == 'true' && '배포' || '빌드' }} ${{ (needs.deploy.result == 'skipped' && needs.docker.result || needs.deploy.result) == 'success' && '✅ 성공' || '❌ 실패' }}*
             • 레지스트리: `${{ needs.setup.outputs.registry }}`
             • 이미지: `${{ needs.docker.outputs.image-tag }}`
             • 커밋: `${{ github.event.head_commit.message }}`
