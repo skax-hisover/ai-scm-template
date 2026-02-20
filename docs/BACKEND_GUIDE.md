@@ -382,9 +382,11 @@ pytest
 | `F` | pyflakes (미사용 import 등) |
 | `I` | isort (import 정렬) |
 | `B` | flake8-bugbear (잠재적 버그) |
+| `C4` | flake8-comprehensions (컴프리헨션 검사) |
 | `T201` | print 문 사용 금지 |
 | `N` | PEP 8 네이밍 |
 | `UP` | pyupgrade (최신 문법 사용) |
+| `ARG001` | unused arguments (미사용 인자 검사) |
 | `SIM` | flake8-simplify (코드 단순화) |
 
 ### 4.4 네이밍 컨벤션

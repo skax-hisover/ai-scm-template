@@ -105,8 +105,10 @@ frontend/src/
 │   └── dashboard/              # 대시보드 (인증 필요)
 │       ├── layout.tsx          # 대시보드 레이아웃 (사이드바)
 │       ├── page.tsx            # 대시보드 메인
-│       └── items/
-│           └── page.tsx        # 아이템 관리
+│       ├── items/
+│       │   └── page.tsx        # 아이템 관리
+│       └── users/
+│           └── page.tsx        # 사용자 관리 (관리자)
 │
 ├── components/                 # 재사용 컴포넌트
 │   └── ui/                     # 공통 UI 컴포넌트
@@ -117,7 +119,9 @@ frontend/src/
 │   ├── api/                    # API 호출 함수
 │   │   ├── client.ts           # Axios 인스턴스 (인터셉터)
 │   │   ├── auth.ts             # 인증 API
-│   │   └── items.ts            # 아이템 API
+│   │   ├── items.ts            # 아이템 API
+│   │   ├── users.ts            # 사용자 관리 API (관리자)
+│   │   └── health.ts           # 헬스체크 API
 │   └── auth/
 │       └── token.ts            # JWT 토큰 관리
 │
@@ -576,7 +580,7 @@ npm run start
 | `dev` | `next dev` | 개발 서버 (Hot Reload) |
 | `build` | `next build` | 프로덕션 빌드 |
 | `start` | `next start` | 프로덕션 서버 실행 |
-| `lint` | `next lint` | ESLint 검사 |
+| `lint` | `eslint . --max-warnings 0` | ESLint 검사 |
 | `type-check` | `tsc --noEmit` | TypeScript 타입 검사 |
 
 ### 7.5 Docker 빌드

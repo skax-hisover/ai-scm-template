@@ -106,6 +106,11 @@ ai-scm-template/
 ├── docker-compose.yml              # Docker Compose (로컬 개발)
 ├── README.md                       # 본 문서 (프로젝트 개요)
 │
+├── .github/workflows/              # ─── CI/CD (GitHub Actions) ───
+│   ├── ci.yml                      # CI — 코드 품질 검증
+│   ├── deploy-dev.yml              # CD — develop → AKS 개발 배포
+│   └── deploy-prod.yml             # CD — main → AKS 운영 배포
+│
 ├── backend/                        # ─── 백엔드 (FastAPI) ───
 │   ├── Dockerfile
 │   ├── pyproject.toml              # Python 의존성 및 도구 설정
@@ -174,7 +179,8 @@ ai-scm-template/
 │       │   └── dashboard/          # 대시보드 (인증 필요)
 │       │       ├── layout.tsx      # 대시보드 레이아웃 (사이드바)
 │       │       ├── page.tsx        # 대시보드 메인
-│       │       └── items/page.tsx  # 아이템 관리 (샘플)
+│       │       ├── items/page.tsx  # 아이템 관리 (샘플)
+│       │       └── users/page.tsx  # 사용자 관리 (관리자)
 │       ├── components/
 │       │   └── ui/                 # 공통 UI 컴포넌트
 │       │       ├── Button.tsx
@@ -183,13 +189,31 @@ ai-scm-template/
 │       │   ├── api/                # API 클라이언트
 │       │   │   ├── client.ts       # Axios 인스턴스 (인터셉터)
 │       │   │   ├── auth.ts         # 인증 API
-│       │   │   └── items.ts        # 아이템 API (샘플)
+│       │   │   ├── items.ts        # 아이템 API (샘플)
+│       │   │   ├── users.ts        # 사용자 관리 API (관리자)
+│       │   │   └── health.ts       # 헬스체크 API
 │       │   └── auth/
 │       │       └── token.ts        # JWT 토큰 관리
 │       ├── hooks/
 │       │   └── useAuth.ts          # 인증 훅
 │       └── types/
 │           └── index.ts            # 전역 타입 정의
+│
+├── k8s/                            # ─── Kubernetes 매니페스트 ───
+│   ├── base/                       # 공통 리소스 (Kustomize base)
+│   │   ├── kustomization.yaml
+│   │   ├── namespace.yaml
+│   │   ├── backend-deployment.yaml
+│   │   ├── backend-service.yaml
+│   │   ├── frontend-deployment.yaml
+│   │   ├── frontend-service.yaml
+│   │   ├── traefik-ingressroute.yaml
+│   │   └── traefik-middleware.yaml
+│   └── overlays/                   # 환경별 오버레이
+│       ├── dev/                    # 개발 환경
+│       │   └── kustomization.yaml
+│       └── prod/                   # 운영 환경
+│           └── kustomization.yaml
 │
 └── docs/                           # ─── 문서 ───
     ├── BACKEND_GUIDE.md            # 백엔드 개발 가이드
@@ -414,7 +438,6 @@ docker compose down -v
 | `PROJECT_NAME` | 프로젝트 이름 | `AI-SCM` |
 | `ENVIRONMENT` | 환경 (`local` / `staging` / `production`) | `local` |
 | `SECRET_KEY` | JWT 서명 키 (**반드시 변경**) | `changethis` |
-| `BACKEND_HOST` | 백엔드 URL | `http://localhost:8000` |
 | `BACKEND_CORS_ORIGINS` | 허용 CORS 오리진 (쉼표 구분) | `http://localhost:3000,...` |
 | `FRONTEND_HOST` | 프론트엔드 URL | `http://localhost:3000` |
 | `NEXT_PUBLIC_API_URL` | 프론트엔드에서 사용할 API URL | `http://localhost:8000` |
