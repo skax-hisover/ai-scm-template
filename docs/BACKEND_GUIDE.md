@@ -433,7 +433,7 @@ from app.core.config import settings
 
 # 설정 사용
 print(settings.PROJECT_NAME)       # "AI-SCM"
-print(settings.DATABASE_URL)       # 자동 생성된 PostgreSQL URL
+print(settings.database_url)       # 자동 생성된 PostgreSQL URL
 print(settings.ENVIRONMENT)        # "local"
 ```
 
