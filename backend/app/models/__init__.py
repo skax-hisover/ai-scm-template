@@ -9,7 +9,7 @@ SQLAlchemy ORM 모델 패키지.
 - 생성일/수정일 컬럼은 TimestampMixin을 사용하세요.
 """
 
-from app.models.base import Base, TimestampMixin  # noqa: F401
 from app.models.agent_run import AgentRun  # noqa: F401
+from app.models.base import Base, TimestampMixin  # noqa: F401
 from app.models.item import Item  # noqa: F401
 from app.models.user import User  # noqa: F401
