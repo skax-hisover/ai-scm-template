@@ -107,6 +107,8 @@ frontend/src/
 │       ├── page.tsx            # 대시보드 메인
 │       ├── items/
 │       │   └── page.tsx        # 아이템 관리
+│       ├── agents/
+│       │   └── page.tsx        # Agent 실행/상태 조회
 │       └── users/
 │           └── page.tsx        # 사용자 관리 (관리자)
 │
@@ -121,7 +123,8 @@ frontend/src/
 │   │   ├── auth.ts             # 인증 API
 │   │   ├── items.ts            # 아이템 API
 │   │   ├── users.ts            # 사용자 관리 API (관리자)
-│   │   └── health.ts           # 헬스체크 API
+│   │   ├── health.ts           # 헬스체크 API
+│   │   └── agents.ts           # Agent 실행 API
 │   └── auth/
 │       └── token.ts            # JWT 토큰 관리
 │
@@ -465,10 +468,48 @@ export default function ProfilePage() {
 
 ```tsx
 {/* ─── 새로운 메뉴 추가 위치 ─── */}
-<Link href="/dashboard/orders" className="...">📋 주문 관리</Link>
+<Link href="/dashboard/agents" className="...">🤖 Agent 실행</Link>
 ```
 
-### 5.6 Next.js API Proxy (`next.config.ts`)
+### 5.6 Agent 실행 페이지 (`app/dashboard/agents/page.tsx`)
+
+- Agent ID와 입력 텍스트를 받아 실행 요청을 생성합니다.
+- 동기/비동기 실행을 선택할 수 있습니다.
+- 실행 이력 목록과 상태(`queued/running/succeeded/failed`)를 조회합니다.
+- 비동기 실행 시 폴링으로 완료 상태를 갱신합니다.
+
+프론트 관점 흐름 다이어그램 (폴링/상태 표시):
+
+```
+[사용자: /dashboard/agents]
+        │ 입력(agent_id, input_text, async_mode)
+        │ 실행 버튼 클릭
+        ▼
+[agents.ts] POST /api/v1/agents/runs
+        │ run_id, status(queued) 수신
+        ▼
+[페이지 상태 업데이트]
+        │ 목록에 신규 run 표시
+        │ status badge: queued
+        ▼
+[비동기 실행(async_mode=true)]
+        │ 주기적 폴링
+        │ GET /api/v1/agents/runs/{run_id}
+        ▼
+[상태 전이 표시]
+        │ queued → running → succeeded | failed
+        ▼
+[결과 렌더링]
+        │ succeeded: output_text 표시
+        │ failed: error_message 표시
+        ▼
+[전체 이력 새로고침]
+        │ GET /api/v1/agents/runs
+        ▼
+[최근 실행 목록/상태 유지]
+```
+
+### 5.7 Next.js API Proxy (`next.config.ts`)
 
 `/api/*` 요청은 Next.js의 `rewrites`를 통해 백엔드로 프록시됩니다. 이로써 CORS 문제 없이 API 호출이 가능합니다.
 
@@ -484,7 +525,7 @@ async rewrites() {
 }
 ```
 
-### 5.7 전역 타입 (`types/index.ts`)
+### 5.8 전역 타입 (`types/index.ts`)
 
 여러 곳에서 공유되는 타입만 이 파일에 정의합니다. API 응답 타입은 해당 API 모듈(`lib/api/`)에 정의합니다.
 

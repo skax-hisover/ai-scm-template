@@ -28,6 +28,7 @@
 | **ORM** | SQLAlchemy | ≥ 2.0 |
 | **DB 마이그레이션** | Alembic | ≥ 1.14 |
 | **비동기 태스크** | Celery + Redis | ≥ 5.4 |
+| **AI/Agent 연동** | External Agent Platform API | — |
 | **인증** | JWT (PyJWT) | ≥ 2.8 |
 | **프론트엔드** | Next.js (App Router) + React + TypeScript | ≥ 15.1 |
 | **HTTP 클라이언트** | Axios | ≥ 1.7 |
@@ -84,6 +85,41 @@
                              └───────────────────────┘
 ```
 
+### Agent 연동 흐름 (요청 → API → Celery → Agent Platform → 결과 저장)
+
+```
+┌──────────────────────────────────────────────┐
+│ Frontend (dashboard/agents)                 │
+│ - 실행 요청 (agent_id, input_text, async)   │
+└───────────────────────┬──────────────────────┘
+                        │ POST /api/v1/agents/runs
+┌───────────────────────▼──────────────────────┐
+│ FastAPI API (api/v1/agents.py)              │
+│ - 실행 레코드 생성 (status=queued)           │
+└───────────────────────┬──────────────────────┘
+                        │ delay(run_id)
+┌───────────────────────▼──────────────────────┐
+│ Celery Worker (tasks/agent_tasks.py)        │
+│ - status: running 으로 전환                  │
+└───────────────────────┬──────────────────────┘
+                        │ HTTP 호출
+┌───────────────────────▼──────────────────────┐
+│ Agent Platform API                           │
+│ - 모델 실행/추론 처리                         │
+└───────────────────────┬──────────────────────┘
+                        │ 결과/오류 반환
+┌───────────────────────▼──────────────────────┐
+│ PostgreSQL (agent_runs 테이블)              │
+│ - status: succeeded/failed                   │
+│ - output_text, error_message 저장            │
+└───────────────────────┬──────────────────────┘
+                        │ GET /api/v1/agents/runs/{run_id}
+┌───────────────────────▼──────────────────────┐
+│ Frontend                                     │
+│ - 실행 상태/결과 표시                         │
+└──────────────────────────────────────────────┘
+```
+
 ### 핵심 설계 원칙
 
 | 원칙 | 설명 |
@@ -119,7 +155,8 @@ ai-scm-template/
 │   │   └── prestart.sh             # 서버 시작 전 스크립트
 │   ├── tests/                      # 테스트
 │   │   ├── conftest.py
-│   │   └── test_health.py
+│   │   ├── test_health.py
+│   │   └── test_agents.py          # Agent 실행 API 테스트
 │   └── app/
 │       ├── main.py                 # ✨ FastAPI 엔트리포인트
 │       ├── initial_data.py         # 초기 데이터 생성
@@ -131,16 +168,19 @@ ai-scm-template/
 │       ├── models/                 # SQLAlchemy ORM 모델
 │       │   ├── base.py             # Base 클래스, TimestampMixin
 │       │   ├── user.py             # 사용자 모델
-│       │   └── item.py             # 아이템 모델 (샘플)
+│       │   ├── item.py             # 아이템 모델 (샘플)
+│       │   └── agent_run.py        # Agent 실행 이력 모델
 │       ├── schemas/                # Pydantic 스키마 (DTO)
 │       │   ├── common.py           # 공통 (Message, Pagination)
 │       │   ├── auth.py             # 인증 (Token, Login)
 │       │   ├── user.py             # 사용자 스키마
-│       │   └── item.py             # 아이템 스키마 (샘플)
+│       │   ├── item.py             # 아이템 스키마 (샘플)
+│       │   └── agent.py            # Agent 실행 스키마
 │       ├── crud/                   # CRUD 레이어
 │       │   ├── base.py             # 제네릭 CRUD Base
 │       │   ├── user.py             # 사용자 CRUD
-│       │   └── item.py             # 아이템 CRUD (샘플)
+│       │   ├── item.py             # 아이템 CRUD (샘플)
+│       │   └── agent_run.py        # Agent 실행 이력 CRUD
 │       ├── api/                    # API 엔드포인트
 │       │   ├── deps.py             # 의존성 (인증, DB세션)
 │       │   ├── router.py           # 라우터 등록
@@ -148,13 +188,17 @@ ai-scm-template/
 │       │       ├── health.py       # 헬스체크
 │       │       ├── auth.py         # 인증 API
 │       │       ├── users.py        # 사용자 API
-│       │       └── items.py        # 아이템 API (샘플)
+│       │       ├── items.py        # 아이템 API (샘플)
+│       │       └── agents.py       # Agent 실행 API
 │       ├── middleware/             # 미들웨어
 │       │   ├── logging_middleware.py
 │       │   └── error_handler.py
+│       ├── services/               # 외부 연동 서비스
+│       │   └── agent_client.py     # Agent 플랫폼 API 클라이언트
 │       ├── tasks/                  # Celery 비동기 태스크
 │       │   ├── celery_app.py       # Celery 설정
-│       │   └── sample_tasks.py     # 샘플 태스크
+│       │   ├── sample_tasks.py     # 샘플 태스크
+│       │   └── agent_tasks.py      # Agent 실행 비동기 태스크
 │       ├── utils/                  # 공통 유틸리티
 │       │   ├── datetime_utils.py
 │       │   ├── string_utils.py
@@ -180,7 +224,8 @@ ai-scm-template/
 │       │       ├── layout.tsx      # 대시보드 레이아웃 (사이드바)
 │       │       ├── page.tsx        # 대시보드 메인
 │       │       ├── items/page.tsx  # 아이템 관리 (샘플)
-│       │       └── users/page.tsx  # 사용자 관리 (관리자)
+│       │       ├── users/page.tsx  # 사용자 관리 (관리자)
+│       │       └── agents/page.tsx # Agent 실행/상태 조회
 │       ├── components/
 │       │   └── ui/                 # 공통 UI 컴포넌트
 │       │       ├── Button.tsx
@@ -191,7 +236,8 @@ ai-scm-template/
 │       │   │   ├── auth.ts         # 인증 API
 │       │   │   ├── items.ts        # 아이템 API (샘플)
 │       │   │   ├── users.ts        # 사용자 관리 API (관리자)
-│       │   │   └── health.ts       # 헬스체크 API
+│       │   │   ├── health.ts       # 헬스체크 API
+│       │   │   └── agents.ts       # Agent 실행 API
 │       │   └── auth/
 │       │       └── token.ts        # JWT 토큰 관리
 │       ├── hooks/
@@ -444,6 +490,11 @@ docker compose down -v
 | `POSTGRES_*` | PostgreSQL 접속 정보 | `localhost:5432` (`.env`에서 변경 가능) |
 | `REDIS_*` | Redis 접속 정보 | `localhost:6379` |
 | `CELERY_*` | Celery 브로커/백엔드 URL | `redis://localhost:6379/0,1` |
+| `AGENT_PLATFORM_BASE_URL` | Agent 플랫폼 API Base URL | — |
+| `AGENT_PLATFORM_API_KEY` | Agent 플랫폼 인증 키 (Bearer) | — |
+| `AGENT_PLATFORM_RUN_PATH` | Agent 실행 API 경로 | `/v1/agents/runs` |
+| `AGENT_REQUEST_TIMEOUT_SECONDS` | Agent API 요청 타임아웃(초) | `60` |
+| `AGENT_DEFAULT_MODEL` | Agent 호출 기본 모델명 | `default` |
 | `FIRST_SUPERUSER` | 초기 관리자 이메일 | `admin@ai-scm.com` |
 | `FIRST_SUPERUSER_PASSWORD` | 초기 관리자 비밀번호 (**반드시 변경**) | `changethis` |
 | `LOG_LEVEL` | 로그 레벨 | `INFO` |

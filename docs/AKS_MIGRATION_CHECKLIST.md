@@ -201,3 +201,27 @@
 - 비고:
   - Azure/GitHub 실제 리소스/시크릿 값은 레포 내에서 검증 불가
   - `k8s/overlays/dev/kustomization.yaml`의 `ENVIRONMENT=development`는 `config.py`의 enum(`local/staging/production`)과 불일치 가능성이 있어 우선 수정 권장
+
+---
+
+## 8) Agent Platform 연동 반영 상태 (v1)
+
+현재 레포에는 Agent 연동 v1 코드가 반영되어 있습니다.
+
+- 백엔드
+  - `api/v1/agents.py` 추가 (실행 생성/목록/단건 조회)
+  - `models/agent_run.py`, `schemas/agent.py`, `crud/agent_run.py` 추가
+  - `services/agent_client.py` 추가 (외부 Agent 플랫폼 호출)
+  - `tasks/agent_tasks.py` 추가 (Celery 비동기 실행)
+  - Alembic 마이그레이션 추가 (`add_agent_runs_table`)
+
+- 프론트엔드
+  - `app/dashboard/agents/page.tsx` 추가
+  - `lib/api/agents.ts` 추가
+  - 대시보드 메뉴에 Agent 실행 링크 추가
+
+- AKS/운영 측 추가 점검 항목
+  - [ ] `AGENT_PLATFORM_BASE_URL`, `AGENT_PLATFORM_RUN_PATH`를 `backend-config`에 반영
+  - [ ] `AGENT_PLATFORM_API_KEY`를 `backend-secret`(또는 외부 시크릿 매니저)로 주입
+  - [ ] Agent 플랫폼 네트워크 egress 허용 정책 점검
+  - [ ] Agent 호출 실패/지연 모니터링 지표(로그/알람) 추가

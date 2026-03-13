@@ -59,6 +59,12 @@ export default function DashboardLayout({
           >
             📦 아이템 관리
           </Link>
+          <Link
+            href="/dashboard/agents"
+            className="block rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+          >
+            🤖 Agent 실행
+          </Link>
           {/* 관리자 전용 메뉴 */}
           {currentUser?.is_superuser && (
             <Link

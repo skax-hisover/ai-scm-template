@@ -7,5 +7,6 @@ CRUD (Create, Read, Update, Delete) 패키지.
 - CRUD 메서드는 DB 세션을 받아서 처리하고, commit은 호출자(API 레이어)에서 관리합니다.
 """
 
+from app.crud.agent_run import agent_run_crud  # noqa: F401
 from app.crud.item import item_crud  # noqa: F401
 from app.crud.user import user_crud  # noqa: F401

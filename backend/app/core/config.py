@@ -120,6 +120,13 @@ class Settings(BaseSettings):
     # --- 모니터링 ---
     SENTRY_DSN: HttpUrl | None = None
 
+    # --- Agent 플랫폼 연동 ---
+    AGENT_PLATFORM_BASE_URL: str | None = None
+    AGENT_PLATFORM_API_KEY: str | None = None
+    AGENT_PLATFORM_RUN_PATH: str = "/v1/agents/runs"
+    AGENT_REQUEST_TIMEOUT_SECONDS: int = 60
+    AGENT_DEFAULT_MODEL: str = "default"
+
     # -----------------------------------------------------------------
     # 보안 검증: 기본 시크릿 값 사용 경고/차단
     # -----------------------------------------------------------------

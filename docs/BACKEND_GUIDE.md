@@ -575,6 +575,63 @@ celery -A app.tasks.celery_app worker --loglevel=info
 # 종료: Ctrl+C 입력
 ```
 
+### 5.8 Agent 플랫폼 연동 (`services/agent_client.py`, `api/v1/agents.py`)
+
+현재 템플릿에는 Agent 플랫폼 연동 v1이 포함되어 있습니다.
+
+구성 파일:
+
+- `models/agent_run.py`: Agent 실행 이력 모델
+- `schemas/agent.py`: 실행 요청/응답 스키마
+- `crud/agent_run.py`: 실행 이력 CRUD 및 상태 전환
+- `services/agent_client.py`: 외부 Agent 플랫폼 호출 클라이언트
+- `tasks/agent_tasks.py`: 비동기 실행 태스크
+- `api/v1/agents.py`: Agent 실행 API
+
+제공 API:
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| POST | `/api/v1/agents/runs` | Agent 실행 요청 생성 (동기/비동기) |
+| GET | `/api/v1/agents/runs` | 실행 이력 목록 조회 |
+| GET | `/api/v1/agents/runs/{run_id}` | 실행 이력 단건 조회 |
+
+연동 흐름 다이어그램:
+
+```
+[Frontend: /dashboard/agents]
+            │ POST /api/v1/agents/runs
+            ▼
+[FastAPI: api/v1/agents.py]
+            │ run 생성(status=queued)
+            │ delay(run_id)
+            ▼
+[Celery: tasks/agent_tasks.py]
+            │ status=running
+            │ HTTP call
+            ▼
+[External Agent Platform API]
+            │ result / error
+            ▼
+[PostgreSQL: agent_runs]
+            │ status=succeeded|failed, output_text/error_message 저장
+            ▼
+[FastAPI 조회 API]
+            │ GET /api/v1/agents/runs/{run_id}
+            ▼
+[Frontend 결과 표시]
+```
+
+관련 환경 변수:
+
+| 변수 | 설명 | 기본값 |
+|------|------|--------|
+| `AGENT_PLATFORM_BASE_URL` | Agent 플랫폼 API Base URL | — |
+| `AGENT_PLATFORM_API_KEY` | Agent 플랫폼 인증 키 | — |
+| `AGENT_PLATFORM_RUN_PATH` | 실행 API 경로 | `/v1/agents/runs` |
+| `AGENT_REQUEST_TIMEOUT_SECONDS` | Agent API 요청 타임아웃(초) | `60` |
+| `AGENT_DEFAULT_MODEL` | 기본 모델명 | `default` |
+
 ---
 
 ## 6. 테스트

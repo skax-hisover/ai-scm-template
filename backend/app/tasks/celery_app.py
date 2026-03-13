@@ -37,6 +37,7 @@ celery_app.conf.update(
     worker_concurrency=4,
     # 태스크 자동 검색
     task_routes={
+        "app.tasks.agent_tasks.*": {"queue": "default"},
         "app.tasks.sample_tasks.*": {"queue": "default"},
         # "app.tasks.email_tasks.*": {"queue": "email"},
         # "app.tasks.report_tasks.*": {"queue": "report"},

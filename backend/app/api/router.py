@@ -11,7 +11,7 @@ API 라우터 설정.
 
 from fastapi import APIRouter
 
-from app.api.v1 import auth, health, items, users
+from app.api.v1 import agents, auth, health, items, users
 
 api_router = APIRouter()
 
@@ -26,6 +26,9 @@ api_router.include_router(users.router, prefix="/users", tags=["users"])
 
 # 아이템 (샘플)
 api_router.include_router(items.router, prefix="/items", tags=["items"])
+
+# Agent 실행
+api_router.include_router(agents.router, prefix="/agents", tags=["agents"])
 
 # ─── 새로운 라우터 추가 위치 ─────────────────────────────────
 # api_router.include_router(orders.router, prefix="/orders", tags=["orders"])
