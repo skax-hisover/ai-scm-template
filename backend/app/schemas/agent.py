@@ -45,4 +45,3 @@ class AgentRunListResponse(BaseModel):
 
     data: list[AgentRunResponse]
     total: int
-

@@ -38,7 +38,9 @@ class CRUDAgentRun(CRUDBase[AgentRun, AgentRunCreate, AgentRunCreate]):
         db.refresh(db_obj)
         return db_obj
 
-    def get_for_user(self, db: Session, *, run_id: uuid.UUID, owner_id: uuid.UUID, is_superuser: bool) -> AgentRun | None:
+    def get_for_user(
+        self, db: Session, *, run_id: uuid.UUID, owner_id: uuid.UUID, is_superuser: bool
+    ) -> AgentRun | None:
         """권한을 고려해 단건 실행 이력을 조회합니다."""
         stmt = select(AgentRun).where(AgentRun.id == run_id)
         if not is_superuser:
@@ -114,4 +116,3 @@ class CRUDAgentRun(CRUDBase[AgentRun, AgentRunCreate, AgentRunCreate]):
 
 
 agent_run_crud = CRUDAgentRun(AgentRun)
-

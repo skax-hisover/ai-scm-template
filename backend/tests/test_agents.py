@@ -37,7 +37,9 @@ def test_create_agent_run_sync_success(client: TestClient, db: Session, monkeypa
 
     app.dependency_overrides[get_current_user] = lambda: user
     monkeypatch.setattr("app.api.v1.agents.invoke_agent_run", mock_invoke_agent_run)
-    response = client.post("/api/v1/agents/runs", json={"agent_id": "default-agent", "input_text": "안녕?", "sync": True})
+    response = client.post(
+        "/api/v1/agents/runs", json={"agent_id": "default-agent", "input_text": "안녕?", "sync": True}
+    )
     app.dependency_overrides.clear()
 
     assert response.status_code == 201
@@ -75,4 +77,3 @@ def test_list_agent_runs(client: TestClient, db: Session, monkeypatch) -> None:
     body = response.json()
     assert body["total"] == 1
     assert body["data"][0]["agent_id"] == "default-agent"
-

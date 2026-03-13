@@ -29,7 +29,9 @@ class AgentRun(TimestampMixin, Base):
     external_run_id: Mapped[str | None] = mapped_column(String(255), nullable=True, comment="외부 플랫폼 실행 ID")
     model_name: Mapped[str | None] = mapped_column(String(120), nullable=True, comment="요청 모델명")
     metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True, comment="추가 메타데이터(JSON 문자열)")
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, comment="실행 시작 시각")
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, comment="실행 시작 시각"
+    )
     finished_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, comment="실행 종료 시각"
     )
@@ -46,4 +48,3 @@ class AgentRun(TimestampMixin, Base):
 
     def __repr__(self) -> str:
         return f"<AgentRun(id={self.id}, agent_id={self.agent_id}, status={self.status})>"
-

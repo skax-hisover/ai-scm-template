@@ -49,4 +49,3 @@ def process_agent_run(self, run_id: str) -> dict[str, Any]:
         raise self.retry(exc=exc) from exc
     finally:
         db.close()
-

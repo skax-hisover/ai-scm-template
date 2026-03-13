@@ -50,17 +50,10 @@ def invoke_agent_run(
         response.raise_for_status()
         body = response.json()
 
-    output_text = (
-        body.get("output")
-        or body.get("result")
-        or body.get("message")
-        or body.get("text")
-        or ""
-    )
+    output_text = body.get("output") or body.get("result") or body.get("message") or body.get("text") or ""
     external_run_id = body.get("run_id") or body.get("id")
     return {
         "external_run_id": external_run_id,
         "output_text": str(output_text),
         "raw_response": body,
     }
-

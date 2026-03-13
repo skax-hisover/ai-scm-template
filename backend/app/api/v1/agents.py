@@ -90,4 +90,3 @@ def get_agent_run(
     if not run:
         raise HTTPException(status_code=404, detail="실행 이력을 찾을 수 없습니다")
     return run
-
