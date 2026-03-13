@@ -1,0 +1,104 @@
+name: Update Frontend Base Image Digest
+
+on:
+  schedule:
+    # Weekly: every Monday at 02:00 UTC
+    - cron: "0 2 * * 1"
+    # Monthly: 1st day of month at 03:00 UTC
+    - cron: "0 3 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: update-frontend-base-image-digest
+  cancel-in-progress: false
+
+jobs:
+  update-digest:
+    name: Update pinned digest in frontend/Dockerfile
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve latest digest for node:20-alpine
+        id: digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIGEST="$(docker buildx imagetools inspect node:20-alpine --format '{{json .Manifest.Digest}}' | tr -d '"')"
+          if [[ -z "${DIGEST}" ]]; then
+            echo "Failed to resolve digest."
+            exit 1
+          fi
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "Resolved digest: ${DIGEST}"
+
+      - name: Update Dockerfile ARG line
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed -i -E "s|^ARG NODE_BASE_IMAGE=.*$|ARG NODE_BASE_IMAGE=node:20-alpine@${{ steps.digest.outputs.digest }}|g" frontend/Dockerfile
+
+      - name: Check for changes
+        id: changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- frontend/Dockerfile; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No change detected."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Digest update detected."
+          fi
+
+      - name: Commit and push update branch
+        if: steps.changes.outputs.changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          BRANCH="chore/update-frontend-base-image-digest"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "${BRANCH}"
+          git add frontend/Dockerfile
+          git commit -m "chore(frontend): bump pinned node:20-alpine digest"
+          git push --force-with-lease origin "${BRANCH}"
+
+      - name: Create or reuse pull request
+        if: steps.changes.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BRANCH="chore/update-frontend-base-image-digest"
+          PR_COUNT="$(gh pr list --head "${BRANCH}" --state open --json number --jq 'length')"
+          if [[ "${PR_COUNT}" -gt 0 ]]; then
+            echo "Open PR already exists for ${BRANCH}. Updated branch only."
+            exit 0
+          fi
+
+          gh pr create \
+            --base main \
+            --head "${BRANCH}" \
+            --title "chore(frontend): update pinned node:20-alpine digest" \
+            --body "## What changed
+
+Automated update of pinned base image digest in \`frontend/Dockerfile\`.
+
+- Updated \`ARG NODE_BASE_IMAGE=node:20-alpine@sha256:...\` to latest digest
+- Triggered by scheduled workflow (weekly/monthly) or manual dispatch
+
+## Why
+
+- Keep security patches current while preserving reproducible builds
+- Reduce risk of stale base image vulnerabilities in production scans"
+
+      - name: Skip notice
+        if: steps.changes.outputs.changed != 'true'
+        run: echo "No digest change, nothing to commit."

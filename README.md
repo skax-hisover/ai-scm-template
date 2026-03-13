@@ -478,11 +478,13 @@ docker compose down -v
 # ── 시작 ──
 docker compose up -d              # 전체 서비스 시작 (백그라운드)
 docker compose up -d db redis     # DB + Redis만 시작
+docker compose up -d db pgadmin   # DB + pgAdmin만 시작 (DB 웹 관리)
 docker compose ps                 # 실행 중인 서비스 상태 확인
 
 # ── 로그 확인 ──
 docker compose logs -f backend    # 백엔드 로그 실시간 확인 (Ctrl+C로 로그 보기 종료)
 docker compose logs -f frontend   # 프론트엔드 로그 실시간 확인
+docker compose logs -f pgadmin    # pgAdmin 로그 실시간 확인
 
 # ── 종료 ──
 docker compose stop               # 전체 서비스 일시 중지 (데이터 유지, 컨테이너 유지)
@@ -509,12 +511,38 @@ docker compose down -v            # 전체 서비스 종료 + 컨테이너·볼�
 | ReDoc | http://localhost:8000/redoc |
 | pgAdmin | http://localhost:5050 |
 
+> ⚠️ `pgAdmin` URL은 `pgadmin` 컨테이너가 실행 중일 때만 접속됩니다.
+> - 예: `docker compose up -d db pgadmin`
+> - 상태 확인: `docker compose ps`
+
 ### 기본 관리자 계정
+
+#### 앱(백엔드) 기본 관리자 계정
 
 | 항목 | 값 |
 |------|-----|
 | 이메일 | `admin@ai-scm.com` |
 | 비밀번호 | `changethis` |
+
+#### pgAdmin 로그인 계정
+
+| 항목 | 값 |
+|------|-----|
+| 이메일 | `admin@ai-scm.com` |
+| 비밀번호 | `admin` |
+
+#### pgAdmin 접속이 안 될 때 체크리스트
+
+```bash
+# 1) pgadmin 서비스 상태 확인
+docker compose ps
+
+# 2) pgadmin 로그 확인
+docker compose logs -f pgadmin
+```
+
+- `docker compose up -d db redis`만 실행한 경우에는 `pgadmin`이 올라오지 않습니다.
+- 로컬에서 `5050` 포트를 다른 프로세스가 사용 중이면 접속이 안 될 수 있습니다.
 
 ---
 
